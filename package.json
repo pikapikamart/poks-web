@@ -11,7 +11,6 @@
     "jobs": "npx trigger.dev@4 dev --env-file .env.local",
     "lint": "eslint .",
     "format": "prettier --write . && eslint . --fix",
-    "format:check": "eslint .",
     "supabase:link": "supabase link",
     "supabase:migration": "supabase migration new",
     "supabase:pull": "supabase db pull --linked",

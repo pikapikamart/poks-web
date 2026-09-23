@@ -32,6 +32,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
           "cleanup_account(uuid)",
           "check_review_sources(jsonb)",
           "reschedule_user(uuid)",
+          "consume_api_rate(text,text,integer,integer)",
           "finish_device_attempt(uuid,uuid,text,text,text,text)",
         ]) {
           const { rows } = await db.query<{ allowed: boolean }>(
@@ -50,6 +51,57 @@ test("database validation, grants, review concurrency, leases and deletion recov
           )
         ).rows[0].allowed,
         false,
+      );
+    },
+  );
+  await asAdmin(db);
+  await t.test(
+    "rate limits atomically report the remaining requests and reset time",
+    async () => {
+      const args = [`user:${alice}`, "ai-interpret", 2, 60];
+      const first = await db.query<{
+        allowed: boolean;
+        remaining: number;
+        request_limit: number;
+        reset_at: string;
+      }>("select * from consume_api_rate($1,$2,$3,$4)", args);
+      const second = await db.query<{
+        allowed: boolean;
+        remaining: number;
+        reset_at: string;
+      }>("select * from consume_api_rate($1,$2,$3,$4)", args);
+      const third = await db.query<{
+        allowed: boolean;
+        remaining: number;
+        reset_at: string;
+      }>("select * from consume_api_rate($1,$2,$3,$4)", args);
+
+      assert.deepEqual(
+        {
+          allowed: first.rows[0].allowed,
+          remaining: first.rows[0].remaining,
+          request_limit: first.rows[0].request_limit,
+        },
+        { allowed: true, remaining: 1, request_limit: 2 },
+      );
+      assert.deepEqual(
+        {
+          allowed: second.rows[0].allowed,
+          remaining: second.rows[0].remaining,
+        },
+        { allowed: true, remaining: 0 },
+      );
+      assert.deepEqual(
+        { allowed: third.rows[0].allowed, remaining: third.rows[0].remaining },
+        { allowed: false, remaining: 0 },
+      );
+      assert.equal(
+        new Date(first.rows[0].reset_at).getTime(),
+        new Date(second.rows[0].reset_at).getTime(),
+      );
+      assert.equal(
+        new Date(second.rows[0].reset_at).getTime(),
+        new Date(third.rows[0].reset_at).getTime(),
       );
     },
   );

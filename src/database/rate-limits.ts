@@ -1,26 +1,27 @@
 import { createServerClient } from "../supabase";
-import { HttpError } from "../libs/http";
+import type { ApiRateLimitPolicy } from "../libs/api/rate-limit";
 
 export const consumeRateLimit = async (
-  userId: string,
+  subject: string,
   bucket: string,
-  max = 60,
+  policy: ApiRateLimitPolicy,
 ) => {
-  const { data, error } = await createServerClient().rpc("consume_rate", {
-    p_user: userId,
+  const { data, error } = await createServerClient().rpc("consume_api_rate", {
+    p_subject: subject,
     p_bucket: bucket,
-    p_max: max,
+    p_limit: policy.limit,
+    p_window_seconds: policy.windowSeconds,
   });
 
   if (error) {
     throw error;
   }
 
-  if (!data) {
-    throw new HttpError(
-      429,
-      "Please take a moment before trying again.",
-      "RATE_LIMITED",
-    );
+  const result = Array.isArray(data) ? data[0] : data;
+
+  if (!result) {
+    throw new Error("Rate limit did not return a result.");
   }
+
+  return result;
 };

@@ -1,19 +1,32 @@
 import { authenticate } from "../../../../src/supabase";
 import { consumeRateLimit } from "../../../../src/database/rate-limits";
-import { failure, success, json, HttpError } from "../../../../src/libs/http";
+import {
+  assertRateLimit,
+  HttpError,
+  json,
+  success,
+  withApiErrorHandling,
+} from "../../../../src/libs/http";
+import {
+  apiRateLimitPolicies,
+  getAuthenticatedRateLimitSubject,
+} from "../../../../src/libs/api/rate-limit";
 import { deleteAccountSchema } from "../../../../src/zod/accounts";
 import { createAccountDeletion } from "../../../../src/database/account-deletions";
 import { completeAccountDeletion } from "../../../../src/libs/account-deletions";
 
 export const runtime = "nodejs";
 
-export const POST = async (request: Request) => {
-  const requestId = crypto.randomUUID(),
-    start = Date.now();
-
-  try {
+export const POST = withApiErrorHandling(
+  "account/delete",
+  async (request, context) => {
     const { db, user } = await authenticate(request);
-    await consumeRateLimit(user.id, "account/delete", 60);
+    const rateLimit = await consumeRateLimit(
+      getAuthenticatedRateLimitSubject(user.id),
+      "account-delete",
+      apiRateLimitPolicies["account-delete"],
+    );
+    assertRateLimit(rateLimit);
     deleteAccountSchema.parse(await json(request));
     await createAccountDeletion(db);
 
@@ -27,8 +40,6 @@ export const POST = async (request: Request) => {
       );
     }
 
-    return success({ deleted: true }, requestId, "account/delete", start);
-  } catch (error) {
-    return failure(error, requestId);
-  }
-};
+    return success({ deleted: true }, context, rateLimit);
+  },
+);

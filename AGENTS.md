@@ -32,6 +32,8 @@ src/trigger/                    Trigger.dev entry points only
 ```
 
 - `app/api/**/route.ts` must export the route method as an arrow function. A route handles only HTTP concerns and composes database and library functions; it does not call a central dispatcher.
+- Wrap each API route in `withApiErrorHandling` from `src/libs/http.ts` for consistent request IDs, safe error responses, security headers, and structured logs. Keep authentication, the selected rate-limit policy, request validation, and route workflow visibly inside that route.
+- Define API rate-limit policies and authenticated subject keys in `src/libs/api/rate-limit.ts`. `src/database/rate-limits.ts` is the only module that calls the server-only `consume_api_rate` RPC; it returns limit metadata for the route response headers.
 - `src/database/reviews.ts` owns `ai_reviews`; `proposals.ts` owns `ai_proposals`; `members.ts` owns `members`; `records.ts` owns `records`; and the same one-table rule applies to every database module.
 - Use table-focused names: `find…ById`, `find…By…`, `list…`, `create…`, `update…`, `delete…`, and a precise domain action only when it maps to one database RPC, such as `consumeRateLimit`.
 - A workflow that combines tables belongs in `src/libs/<domain>`. For example, notification delivery orchestration belongs in `src/libs/notifications/worker.ts`, while table operations remain in their corresponding `src/database` modules.
@@ -86,7 +88,7 @@ src/
 - Write named functions as `const` arrow functions. Do not use `function` declarations, except where a framework makes them unavoidable.
 - `npm run format` runs Prettier first, then ESLint autofix. Prettier handles wrapping and spaces; ESLint enforces the required blank lines between declarations and statements.
 - Keep block bodies compact. Put blank lines outside functions, including `const` arrow functions, `if`/`else`, loops, `try`/`catch`, and `switch` blocks to separate them from surrounding code. Keep imports as one contiguous group, followed by one empty line before the first non-import statement; never let an import touch ordinary code. Keep an empty line between exported declarations, after setup or guard groups, and before a final return. Do not compress multiple logical steps onto one line.
-- Run `npm run format` followed by `npm run format:check`, `npm run lint`, and `npm run typecheck` before finishing. `format:check` uses ESLint because it validates the required statement spacing that Prettier cannot retain on its own.
+- Run `npm run format`, `npm run lint`, and `npm run typecheck` before finishing. `npm run format` applies both Prettier formatting and the ESLint statement-spacing rules.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

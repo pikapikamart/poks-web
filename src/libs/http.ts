@@ -1,5 +1,19 @@
 import { ZodError } from "zod";
 
+export type ApiRequestContext = {
+  request: Request;
+  requestId: string;
+  route: string;
+  start: number;
+};
+
+export type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  request_limit: number;
+  reset_at: string;
+};
+
 export class HttpError extends Error {
   constructor(
     public status: number,
@@ -9,6 +23,48 @@ export class HttpError extends Error {
     super(message);
   }
 }
+
+export class RateLimitError extends HttpError {
+  constructor(public result: RateLimitResult) {
+    super(429, "Please take a moment before trying again.", "RATE_LIMITED");
+  }
+}
+
+export const assertRateLimit = (result: RateLimitResult) => {
+  if (!result.allowed) {
+    throw new RateLimitError(result);
+  }
+};
+
+const isRequestId = (value: string | null) =>
+  value !== null && /^[a-zA-Z0-9_-]{8,128}$/.test(value);
+
+export const createApiRequestContext = (
+  request: Request,
+  route: string,
+): ApiRequestContext => ({
+  request,
+  requestId: isRequestId(request.headers.get("x-request-id"))
+    ? request.headers.get("x-request-id")!
+    : crypto.randomUUID(),
+  route,
+  start: Date.now(),
+});
+
+export const withApiErrorHandling = <TArguments extends [Request]>(
+  route: string,
+  handler: (...args: [...TArguments, ApiRequestContext]) => Promise<Response>,
+) => {
+  return async (...args: TArguments): Promise<Response> => {
+    const context = createApiRequestContext(args[0], route);
+
+    try {
+      return await handler(...args, context);
+    } catch (error) {
+      return failure(error, context);
+    }
+  };
+};
 
 export const databaseError = (error: { message: string }): never => {
   const message = error.message;
@@ -64,7 +120,30 @@ export const databaseError = (error: { message: string }): never => {
   throw error;
 };
 
-export const failure = (error: unknown, requestId = crypto.randomUUID()) => {
+const applyRateLimitHeaders = (response: Response, result: RateLimitResult) => {
+  response.headers.set("RateLimit-Limit", String(result.request_limit));
+  response.headers.set("RateLimit-Remaining", String(result.remaining));
+  response.headers.set(
+    "RateLimit-Reset",
+    String(Math.ceil(new Date(result.reset_at).getTime() / 1000)),
+  );
+
+  if (!result.allowed) {
+    response.headers.set(
+      "Retry-After",
+      String(
+        Math.max(
+          1,
+          Math.ceil((new Date(result.reset_at).getTime() - Date.now()) / 1000),
+        ),
+      ),
+    );
+  }
+
+  return response;
+};
+
+export const failure = (error: unknown, context: ApiRequestContext) => {
   const mapped =
     error instanceof ZodError
       ? new HttpError(400, "Invalid request.", "INVALID_REQUEST")
@@ -76,26 +155,37 @@ export const failure = (error: unknown, requestId = crypto.randomUUID()) => {
           "INTERNAL_ERROR",
         );
 
+  const rateLimit =
+    mapped instanceof RateLimitError ? mapped.result : undefined;
+  const url = new URL(context.request.url);
+
   console.error(
     JSON.stringify({
       event: "request_failed",
-      requestId,
+      requestId: context.requestId,
+      route: context.route,
+      method: context.request.method,
+      pathname: url.pathname,
       status: mapped.status,
       code: mapped.code,
+      durationMs: Date.now() - context.start,
     }),
   );
 
-  return Response.json(
-    { error: mapped.message, code: mapped.code, requestId },
+  const response = Response.json(
+    { error: mapped.message, code: mapped.code, requestId: context.requestId },
     {
       status: mapped.status,
       headers: {
-        "X-Request-Id": requestId,
+        "X-Request-Id": context.requestId,
         "Cache-Control": "no-store",
-        ...(mapped.status === 429 ? { "Retry-After": "3600" } : {}),
+        "X-Content-Type-Options": "nosniff",
+        Vary: "Authorization",
       },
     },
   );
+
+  return rateLimit ? applyRateLimitHeaders(response, rateLimit) : response;
 };
 
 export const boundedBody = async (
@@ -218,20 +308,27 @@ export const audio = async (request: Request): Promise<File> => {
 
 export const success = (
   body: unknown,
-  requestId: string,
-  route: string,
-  start: number,
+  context: ApiRequestContext,
+  rateLimit?: RateLimitResult,
 ) => {
   console.info(
     JSON.stringify({
       event: "request_complete",
-      requestId,
-      route,
-      durationMs: Date.now() - start,
+      requestId: context.requestId,
+      route: context.route,
+      method: context.request.method,
+      durationMs: Date.now() - context.start,
     }),
   );
 
-  return Response.json(body, {
-    headers: { "X-Request-Id": requestId, "Cache-Control": "no-store" },
+  const response = Response.json(body, {
+    headers: {
+      "X-Request-Id": context.requestId,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      Vary: "Authorization",
+    },
   });
+
+  return rateLimit ? applyRateLimitHeaders(response, rateLimit) : response;
 };

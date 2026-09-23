@@ -1,5 +1,5 @@
-import { failure, HttpError } from "../../../src/libs/http";
+import { HttpError, withApiErrorHandling } from "../../../src/libs/http";
 
-export const POST = async () => {
-  return failure(new HttpError(404, "Unknown endpoint.", "NOT_FOUND"));
-};
+export const POST = withApiErrorHandling("unknown", async () => {
+  throw new HttpError(404, "Unknown endpoint.", "NOT_FOUND");
+});

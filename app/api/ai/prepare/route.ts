@@ -1,6 +1,16 @@
 import { authenticate } from "../../../../src/supabase";
 import { consumeRateLimit } from "../../../../src/database/rate-limits";
-import { failure, success, json, HttpError } from "../../../../src/libs/http";
+import {
+  assertRateLimit,
+  HttpError,
+  json,
+  success,
+  withApiErrorHandling,
+} from "../../../../src/libs/http";
+import {
+  apiRateLimitPolicies,
+  getAuthenticatedRateLimitSubject,
+} from "../../../../src/libs/api/rate-limit";
 import { prepareProposalSchema } from "../../../../src/zod/ai";
 import { recordSchema } from "../../../../src/zod/records";
 import { reviewSourcesSchema } from "../../../../src/zod/ai";
@@ -15,13 +25,16 @@ import { buildActions } from "../../../../src/libs/ai/domain";
 
 export const runtime = "nodejs";
 
-export const POST = async (request: Request) => {
-  const requestId = crypto.randomUUID(),
-    start = Date.now();
-
-  try {
+export const POST = withApiErrorHandling(
+  "ai/prepare",
+  async (request, context) => {
     const { db, user } = await authenticate(request);
-    await consumeRateLimit(user.id, "ai/prepare", 60);
+    const rateLimit = await consumeRateLimit(
+      getAuthenticatedRateLimitSubject(user.id),
+      "ai-prepare",
+      apiRateLimitPolicies["ai-prepare"],
+    );
+    assertRateLimit(rateLimit);
     const input = prepareProposalSchema.parse(await json(request));
 
     if (input.question || !input.actions.length) {
@@ -38,7 +51,7 @@ export const POST = async (request: Request) => {
     if (existing) {
       const id = await createProposal(db, input, []);
 
-      return success({ id }, requestId, "ai/prepare", start);
+      return success({ id }, context, rateLimit);
     }
 
     const review = await findReviewById(user.id, input.reviewId);
@@ -111,8 +124,6 @@ export const POST = async (request: Request) => {
 
     const id = await createProposal(db, input, actions);
 
-    return success({ id }, requestId, "ai/prepare", start);
-  } catch (error) {
-    return failure(error, requestId);
-  }
-};
+    return success({ id }, context, rateLimit);
+  },
+);

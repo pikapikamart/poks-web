@@ -425,8 +425,8 @@ export const sendDueNotifications = async () => {
                 p_claim: job.claim_token!,
                 p_token: token,
                 p_status: result.status,
-                p_ticket: result.ticket,
-                p_error: result.error,
+                ...(result.ticket ? { p_ticket: result.ticket } : {}),
+                ...(result.error ? { p_error: result.error } : {}),
               }),
             ) === true
           );

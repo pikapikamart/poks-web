@@ -1,6 +1,15 @@
 import { authenticate } from "../../../../src/supabase";
 import { consumeRateLimit } from "../../../../src/database/rate-limits";
-import { failure, success, json } from "../../../../src/libs/http";
+import {
+  assertRateLimit,
+  json,
+  success,
+  withApiErrorHandling,
+} from "../../../../src/libs/http";
+import {
+  apiRateLimitPolicies,
+  getAuthenticatedRateLimitSubject,
+} from "../../../../src/libs/api/rate-limit";
 import { interpretSchema } from "../../../../src/zod/ai";
 import { recordSchema } from "../../../../src/zod/records";
 import {
@@ -16,13 +25,16 @@ import { interpretThought } from "../../../../src/libs/ai/interpret";
 
 export const runtime = "nodejs";
 
-export const POST = async (request: Request) => {
-  const requestId = crypto.randomUUID(),
-    start = Date.now();
-
-  try {
+export const POST = withApiErrorHandling(
+  "ai/interpret",
+  async (request, context) => {
     const { db, user } = await authenticate(request);
-    await consumeRateLimit(user.id, "ai/interpret", 60);
+    const rateLimit = await consumeRateLimit(
+      getAuthenticatedRateLimitSubject(user.id),
+      "ai-interpret",
+      apiRateLimitPolicies["ai-interpret"],
+    );
+    assertRateLimit(rateLimit);
     const input = interpretSchema.parse(await json(request));
 
     const terms =
@@ -52,8 +64,6 @@ export const POST = async (request: Request) => {
     const proposal = await interpretThought(input, records, spaces, people);
     const reviewId = await createReview(user.id, records);
 
-    return success({ ...proposal, reviewId }, requestId, "ai/interpret", start);
-  } catch (error) {
-    return failure(error, requestId);
-  }
-};
+    return success({ ...proposal, reviewId }, context, rateLimit);
+  },
+);

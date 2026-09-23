@@ -110,8 +110,15 @@ const serviceMock = (
         });
       }
 
-      if (path === "/rest/v1/rpc/consume_rate") {
-        return Response.json(true);
+      if (path === "/rest/v1/rpc/consume_api_rate") {
+        const limit = (call.body as { p_limit: number }).p_limit;
+
+        return Response.json({
+          allowed: true,
+          remaining: limit - 1,
+          request_limit: limit,
+          reset_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        });
       }
 
       if (path === "/rest/v1/ai_reviews") {
@@ -233,7 +240,14 @@ test("all protected route exports reject unauthenticated requests before accessi
 });
 test("all protected routes rate limit before reading input or changing data", async (t) => {
   const calls = serviceMock(t, (c) =>
-    c.url.pathname.endsWith("/consume_rate") ? Response.json(false) : undefined,
+    c.url.pathname.endsWith("/consume_api_rate")
+      ? Response.json({
+        allowed: false,
+        remaining: 0,
+        request_limit: (c.body as { p_limit: number }).p_limit,
+        reset_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      })
+      : undefined,
   );
 
   for (const route of [
@@ -253,19 +267,19 @@ test("all protected routes rate limit before reading input or changing data", as
     calls.every(
       (c) =>
         c.url.pathname === "/auth/v1/user" ||
-        c.url.pathname.endsWith("/consume_rate"),
+        c.url.pathname.endsWith("/consume_api_rate"),
     ),
   );
 
   const rates = calls
-    .filter((c) => c.url.pathname.endsWith("/consume_rate"))
-    .map((c) => c.body as { p_bucket: string; p_max: number });
+    .filter((c) => c.url.pathname.endsWith("/consume_api_rate"))
+    .map((c) => c.body as { p_bucket: string; p_limit: number });
 
-  assert.equal(rates.find((r) => r.p_bucket === "ai/transcribe")?.p_max, 30);
+  assert.equal(rates.find((r) => r.p_bucket === "ai-transcribe")?.p_limit, 30);
   assert.ok(
     rates
-      .filter((r) => r.p_bucket !== "ai/transcribe")
-      .every((r) => r.p_max === 60),
+      .filter((r) => r.p_bucket !== "ai-transcribe")
+      .every((r) => r.p_limit === 60),
   );
 });
 test("interpret route validates input, retrieves records and creates a review", async (t) => {
@@ -287,7 +301,10 @@ test("interpret route validates input, retrieves records and creates a review", 
     ).length,
     1,
   );
-  assert.equal((await unknownRoute()).status, 404);
+  assert.equal(
+    (await unknownRoute(new Request("http://localhost/api/unknown"))).status,
+    404,
+  );
   assert.deepEqual(await (await health()).json(), {
     service: "pox-api",
     status: "ok",
@@ -403,7 +420,8 @@ test("account deletion validates confirmation, prepares deletion, and reports re
 
   const mutations = calls
     .filter(
-      (c) => c.method !== "GET" && !c.url.pathname.endsWith("/consume_rate"),
+      (c) =>
+        c.method !== "GET" && !c.url.pathname.endsWith("/consume_api_rate"),
     )
     .map((c) => c.url.pathname);
 

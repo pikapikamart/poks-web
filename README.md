@@ -73,7 +73,7 @@ Set `EXPO_ACCESS_TOKEN` when enhanced push security is enabled in Expo. Mobile E
 | `POST /api/invitations/accept` | `{ token }`                                             | `{ spaceId }`                                                    |
 | `POST /api/account/delete`     | `{ confirm: "DELETE" }`                                 | `{ deleted: true }`, or `DELETION_PENDING` while cleanup retries |
 
-Errors have `{ error, code, requestId }` and an `X-Request-Id` header. JSON bodies are limited to 100 KB. Rate limits are per authenticated user and endpoint: 60 per hour, or 30 for transcription. Provider calls have bounded timeouts and no implicit retries; the user retains their input when retrying.
+Errors have `{ error, code, requestId }` and an `X-Request-Id` header. Every API response is `no-store`, varies by authorization, and prevents content-type sniffing. JSON bodies are limited to 100 KB; multipart audio is limited to 10 MB and requires an accepted audio MIME type. Rate limits are atomic, per authenticated user and endpoint, with `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, and `Retry-After` headers: 60 per hour for mutations and AI text requests, and 30 per hour for transcription. Provider calls have bounded timeouts and no implicit retries; the user retains their input when retrying.
 
 The mobile capture caller was updated with the API. Older clients without a `reviewId` and preparation `requestId` must update before using AI preparation. A changed proposal needs a new request ID; retries of an unchanged proposal reuse it. Preparation rejects intervening edits; application checks versions and permissions again. Applied proposals return their saved result on replay even after the original review expiry.
 
@@ -93,7 +93,7 @@ Recurring responsibilities produce independent occurrences without completing ea
 npm run typecheck
 npm test
 npm run lint
-npm run format:check
+npm run format
 npm run build
 npm run supabase:gentypes
 ```
@@ -110,7 +110,7 @@ This folder has its own package manifest, lockfile, dependencies, and commands. 
 
 ## Source layout
 
-Each `app/api/**/route.ts` owns its HTTP method, authentication, rate limiting, input validation, CRUD workflow, and response handling. There is no endpoint registry or handler factory. Database operations stay in domain files under `src/database`, as required by `AGENTS.md`.
+Each `app/api/**/route.ts` owns its HTTP method, authentication, rate-limit policy, input validation, CRUD workflow, and response handling. `withApiErrorHandling` only supplies shared request IDs, safe error envelopes, response security headers, and structured logs; it never dispatches route logic. There is no endpoint registry or handler factory. Database operations stay in domain files under `src/database`, as required by `AGENTS.md`.
 
 ```text
 app/api/                Route handlers and request workflows
