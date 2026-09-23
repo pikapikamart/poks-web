@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { zoneSchema } from "./common";
+
 export const preferencesSchema = z.object({
   timeZone: zoneSchema,
   quietStart: z.number().int().min(0).max(23).nullable(),

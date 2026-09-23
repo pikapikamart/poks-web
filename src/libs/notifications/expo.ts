@@ -13,6 +13,10 @@ export const expoRequest = async (
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok) throw new Error(`Push HTTP ${response.status}`);
+
+  if (!response.ok) {
+    throw new Error(`Push HTTP ${response.status}`);
+  }
+
   return response.json();
 };

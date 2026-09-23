@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 export const ticketSchema = z.object({
   status: z.enum(["ok", "error"]),
   id: z.string().optional(),

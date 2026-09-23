@@ -3,21 +3,29 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { blankContent } from "../src/libs/records";
+
 const a = "00000000-0000-4000-8000-000000000001",
   b = "00000000-0000-4000-8000-000000000002";
+
 test("migrations, RLS, conflicts, completion, and invitation lifecycle", async () => {
   const db = new PGlite();
+
   try {
     await db.exec(
       `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema public,auth to authenticated,service_role;grant execute on function auth.uid() to authenticated;create publication supabase_realtime;insert into auth.users values('${a}'),('${b}');`,
     );
-    for (const file of readdirSync("supabase/migrations").sort())
+
+    for (const file of readdirSync("supabase/migrations").sort()) {
       await db.exec(readFileSync(`supabase/migrations/${file}`, "utf8"));
+    }
+
     await db.exec(
       `set role authenticated;select set_config('request.jwt.claim.sub','${a}',false);`,
     );
+
     const id = crypto.randomUUID(),
       operation = crypto.randomUUID();
+
     const content = {
       ...blankContent(),
       title: "Trip",
@@ -33,6 +41,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       ],
       completed: true,
     };
+
     const record = {
       id,
       owner_id: a,
@@ -41,6 +50,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       content,
       deleted: false,
     };
+
     const save = () =>
       db.query<{
         result: { version: number; content: { completed: boolean } };
@@ -48,6 +58,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
         operation,
         JSON.stringify(record),
       ]);
+
     const first = await save();
     assert.equal(first.rows[0].result.content.completed, false);
     assert.equal((await save()).rows[0].result.version, 1);
@@ -68,14 +79,17 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       /FORBIDDEN/,
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
+
     const space = (
       await db.query<{ id: string }>("select (create_space('Family')).id")
     ).rows[0].id;
+
     const token = (
       await db.query<{ token: string }>("select (invite($1,'viewer')).token", [
         space,
       ])
     ).rows[0].token;
+
     await db.query("select save_record($1,$2,1)", [
       crypto.randomUUID(),
       JSON.stringify({ ...record, space_id: space }),

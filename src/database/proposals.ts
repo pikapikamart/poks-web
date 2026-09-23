@@ -5,6 +5,7 @@ import type { DatabaseClient } from "./types/client";
 import { createServerClient } from "../supabase";
 import { checked } from "../libs/database";
 import { databaseError } from "../libs/http";
+
 export const findProposalByRequestId = async (
   userId: string,
   requestId: string,
@@ -29,12 +30,20 @@ export const createProposal = async (
     p_body: input,
     p_actions: actions,
   });
-  if (error) databaseError(error);
+
+  if (error) {
+    databaseError(error);
+  }
+
   return data;
 };
 
 export const applyProposalById = async (db: DatabaseClient, id: string) => {
   const { data, error } = await db.rpc("apply_proposal", { p_id: id });
-  if (error) databaseError(error);
+
+  if (error) {
+    databaseError(error);
+  }
+
   return data;
 };

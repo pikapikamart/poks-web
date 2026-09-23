@@ -1,5 +1,6 @@
 import type { DatabaseClient } from "./types/client";
 import { checked } from "../libs/database";
+
 export const listProfiles = async (db: DatabaseClient) => {
   return (
     checked(

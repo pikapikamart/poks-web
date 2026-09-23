@@ -13,17 +13,27 @@ export const scheduleFor = (
     record.kind === "context" ||
     record.content.completed ||
     record.content.archived
-  )
+  ) {
     return [];
+  }
+
   const due = dueTime(record.content, prefs);
-  if (!due) return [];
+
+  if (!due) {
+    return [];
+  }
+
   const main = afterQuietHours(due, prefs),
     jobs = [{ kind: "due", due_at: main }];
+
   const used = new Set([Date.parse(main)]);
+
   const nudge = DateTime.fromISO(due)
     .minus({ minutes: record.content.nudgeMinutes })
     .toISO()!;
+
   const allowed = afterQuietHours(nudge, prefs);
+
   if (
     record.content.nudgeMinutes > 0 &&
     Date.parse(allowed) > now &&
@@ -32,7 +42,8 @@ export const scheduleFor = (
     jobs.push({ kind: "nudge", due_at: allowed });
     used.add(Date.parse(allowed));
   }
-  if (prefs.repeatMinutes > 0)
+
+  if (prefs.repeatMinutes > 0) {
     for (let i = 1; i <= 3; i++) {
       const repeat = afterQuietHours(
         new Date(
@@ -40,13 +51,17 @@ export const scheduleFor = (
         ).toISOString(),
         prefs,
       );
+
       if (!used.has(Date.parse(repeat))) {
         jobs.push({ kind: `repeat-${i}`, due_at: repeat });
         used.add(Date.parse(repeat));
       }
     }
+  }
+
   return jobs;
 };
+
 export type PushTicket = {
   status: "ok" | "error";
   id?: string;
@@ -58,6 +73,7 @@ type Outcome = {
   ticket: string | null;
   error: string | null;
 };
+
 export const deliverToDevices = async (
   attempts: Attempt[],
   ports: {
@@ -68,7 +84,10 @@ export const deliverToDevices = async (
   },
 ) => {
   for (const attempt of attempts) {
-    if (attempt.status !== "pending") continue;
+    if (attempt.status !== "pending") {
+      continue;
+    }
+
     if (!(await ports.eligible(attempt.token))) {
       if (
         !(await ports.persist(attempt.token, {
@@ -76,12 +95,16 @@ export const deliverToDevices = async (
           ticket: null,
           error: "NO_LONGER_ELIGIBLE",
         }))
-      )
+      ) {
         return;
+      }
+
       continue;
     }
+
     let outcome: Outcome,
       invalid = false;
+
     try {
       const ticket = await ports.send(attempt.token);
       invalid = ticket.details?.error === "DeviceNotRegistered";
@@ -89,21 +112,27 @@ export const deliverToDevices = async (
         ticket.status === "ok" && ticket.id
           ? { status: "accepted", ticket: ticket.id, error: null }
           : {
-              status:
+            status:
                 invalid ||
                 ticket.details?.error === "MessageTooBig" ||
                 ticket.details?.error === "InvalidCredentials"
                   ? "failed"
                   : "pending",
-              ticket: null,
-              error: ticket.details?.error ?? "PUSH_REJECTED",
-            };
+            ticket: null,
+            error: ticket.details?.error ?? "PUSH_REJECTED",
+          };
     } catch {
       outcome = { status: "pending", ticket: null, error: "PUSH_UNCONFIRMED" };
     }
+
     // Persist each accepted ticket before attempting the next device.
-    if (!(await ports.persist(attempt.token, outcome))) return;
-    if (invalid) await ports.retire(attempt.token);
+    if (!(await ports.persist(attempt.token, outcome))) {
+      return;
+    }
+
+    if (invalid) {
+      await ports.retire(attempt.token);
+    }
   }
 };
 
@@ -112,7 +141,10 @@ export const receiptOutcome = (
   acceptedAt: number,
   now: number,
 ) => {
-  if (!receipt) return now - acceptedAt >= 24 * 60 * 60_000 ? "expired" : null;
+  if (!receipt) {
+    return now - acceptedAt >= 24 * 60 * 60_000 ? "expired" : null;
+  }
+
   return receipt.status === "ok"
     ? "delivered"
     : (receipt.details?.error ?? "error");

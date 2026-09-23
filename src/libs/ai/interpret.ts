@@ -8,6 +8,7 @@ import { env } from "../env";
 import { HttpError } from "../http";
 import { modelProposalSchema } from "../../zod/ai";
 import { normalizeProposal } from "./domain";
+
 export const interpretThought = async (
   input: z.infer<typeof interpretSchema>,
   records: PoxRecord[],
@@ -20,8 +21,10 @@ export const interpretThought = async (
     timeout: 25_000,
     maxRetries: 0,
   });
+
   let raw: z.infer<typeof modelProposalSchema>;
   const model = process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-luna";
+
   try {
     const response = await client.responses.parse({
       model,
@@ -47,15 +50,21 @@ export const interpretThought = async (
       ],
       text: { format: zodTextFormat(modelProposalSchema, "pox_proposal") },
     });
-    if (!response.output_parsed)
+
+    if (!response.output_parsed) {
       throw new HttpError(
         422,
         "Pox could not interpret that. You can save it manually.",
         "AI_UNRESOLVED",
       );
+    }
+
     raw = response.output_parsed;
   } catch (error) {
-    if (error instanceof HttpError) throw error;
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
     throw new HttpError(
       502,
       "Pox could not interpret that right now. Your text is safe; try again or save manually.",

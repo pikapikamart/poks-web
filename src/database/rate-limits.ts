@@ -1,5 +1,6 @@
 import { createServerClient } from "../supabase";
 import { HttpError } from "../libs/http";
+
 export const consumeRateLimit = async (
   userId: string,
   bucket: string,
@@ -10,11 +11,16 @@ export const consumeRateLimit = async (
     p_bucket: bucket,
     p_max: max,
   });
-  if (error) throw error;
-  if (!data)
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
     throw new HttpError(
       429,
       "Please take a moment before trying again.",
       "RATE_LIMITED",
     );
+  }
 };

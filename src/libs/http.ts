@@ -9,44 +9,58 @@ export class HttpError extends Error {
     super(message);
   }
 }
+
 export const databaseError = (error: { message: string }): never => {
   const message = error.message;
-  if (/CONFLICT/.test(message))
+
+  if (/CONFLICT/.test(message)) {
     throw new HttpError(
       409,
       "This changed while you were reviewing it. Refresh and review again.",
       "CONFLICT",
     );
-  if (/TRANSFER_OWNERSHIP/.test(message))
+  }
+
+  if (/TRANSFER_OWNERSHIP/.test(message)) {
     throw new HttpError(
       409,
       "Transfer ownership or delete your shared spaces first.",
       "OWNED_SPACES",
     );
-  if (/UNAUTHENTICATED|ACCOUNT_DELETING/.test(message))
+  }
+
+  if (/UNAUTHENTICATED|ACCOUNT_DELETING/.test(message)) {
     throw new HttpError(
       403,
       "This account is unavailable.",
       "ACCOUNT_UNAVAILABLE",
     );
-  if (/FORBIDDEN/.test(message))
+  }
+
+  if (/FORBIDDEN/.test(message)) {
     throw new HttpError(
       403,
       "You do not have permission for this change.",
       "FORBIDDEN",
     );
-  if (/EXPIRED|UNAVAILABLE/.test(message))
+  }
+
+  if (/EXPIRED|UNAVAILABLE/.test(message)) {
     throw new HttpError(
       410,
       "This invitation or proposal is no longer available.",
       "EXPIRED",
     );
-  if (/INVALID|DUPLICATE|CANNOT/.test(message))
+  }
+
+  if (/INVALID|DUPLICATE|CANNOT/.test(message)) {
     throw new HttpError(
       400,
       "Check the details of your request.",
       "INVALID_REQUEST",
     );
+  }
+
   throw error;
 };
 
@@ -57,10 +71,11 @@ export const failure = (error: unknown, requestId = crypto.randomUUID()) => {
       : error instanceof HttpError
         ? error
         : new HttpError(
-            500,
-            "This request could not be completed. Please try again.",
-            "INTERNAL_ERROR",
-          );
+          500,
+          "This request could not be completed. Please try again.",
+          "INTERNAL_ERROR",
+        );
+
   console.error(
     JSON.stringify({
       event: "request_failed",
@@ -69,6 +84,7 @@ export const failure = (error: unknown, requestId = crypto.randomUUID()) => {
       code: mapped.code,
     }),
   );
+
   return Response.json(
     { error: mapped.message, code: mapped.code, requestId },
     {
@@ -87,32 +103,48 @@ export const boundedBody = async (
   limit: number,
 ): Promise<Uint8Array<ArrayBuffer>> => {
   const declared = request.headers.get("content-length");
-  if (declared && (!/^\d+$/.test(declared) || Number(declared) > limit))
+
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) > limit)) {
     throw new HttpError(413, "Request too large.", "BODY_TOO_LARGE");
-  if (!request.body) return new Uint8Array();
+  }
+
+  if (!request.body) {
+    return new Uint8Array();
+  }
+
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
+
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+
+      if (done) {
+        break;
+      }
+
       size += value.byteLength;
+
       if (size > limit) {
         await reader.cancel();
         throw new HttpError(413, "Request too large.", "BODY_TOO_LARGE");
       }
+
       chunks.push(value);
     }
   } finally {
     reader.releaseLock();
   }
+
   const result = new Uint8Array(size);
   let offset = 0;
+
   for (const chunk of chunks) {
     result.set(chunk, offset);
     offset += chunk.length;
   }
+
   return result;
 };
 
@@ -120,13 +152,16 @@ export const json = async (request: Request): Promise<unknown> => {
   if (
     request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !==
     "application/json"
-  )
+  ) {
     throw new HttpError(
       415,
       "Send JSON for this request.",
       "UNSUPPORTED_MEDIA",
     );
+  }
+
   const bytes = await boundedBody(request, 100_000);
+
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
@@ -136,14 +171,18 @@ export const json = async (request: Request): Promise<unknown> => {
 
 export const audio = async (request: Request): Promise<File> => {
   const type = request.headers.get("content-type") ?? "";
-  if (!/^multipart\/form-data\s*;/i.test(type))
+
+  if (!/^multipart\/form-data\s*;/i.test(type)) {
     throw new HttpError(
       415,
       "Send a multipart recording.",
       "UNSUPPORTED_MEDIA",
     );
+  }
+
   const bytes = await boundedBody(request, 10_065_536);
   let form: FormData;
+
   try {
     form = await new Response(bytes, {
       headers: { "content-type": type },
@@ -151,7 +190,9 @@ export const audio = async (request: Request): Promise<File> => {
   } catch {
     throw new HttpError(400, "Malformed recording upload.", "INVALID_AUDIO");
   }
+
   const file = form.get("audio");
+
   if (
     !(file instanceof File) ||
     form.getAll("audio").length !== 1 ||
@@ -164,12 +205,14 @@ export const audio = async (request: Request): Promise<File> => {
       "audio/wav",
       "audio/x-m4a",
     ].includes(file.type)
-  )
+  ) {
     throw new HttpError(
       file instanceof File && file.size > 10_000_000 ? 413 : 400,
       "Use an audio recording under 10 MB.",
       "INVALID_AUDIO",
     );
+  }
+
   return file;
 };
 
@@ -187,6 +230,7 @@ export const success = (
       durationMs: Date.now() - start,
     }),
   );
+
   return Response.json(body, {
     headers: { "X-Request-Id": requestId, "Cache-Control": "no-store" },
   });

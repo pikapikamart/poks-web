@@ -4,6 +4,7 @@ import { blankContent, completion } from "../src/libs/records";
 import { defaultPreferences } from "../src/libs/preferences";
 import { contentSchema } from "../src/zod/records";
 import { nextOccurrence, afterQuietHours, dueTime } from "../src/libs/time";
+
 test("daily recurrence preserves wall time across daylight saving", () => {
   const c = {
     ...blankContent("America/New_York"),
@@ -11,6 +12,7 @@ test("daily recurrence preserves wall time across daylight saving", () => {
     dueAt: "2026-03-07T14:00:00.000Z",
     recurrence: "daily" as const,
   };
+
   assert.equal(nextOccurrence(c)?.dueAt, "2026-03-08T13:00:00.000Z");
 });
 test("monthly recurrence clamps a missing day", () => {
@@ -31,6 +33,7 @@ test("monthly recurrence returns to its anchor day after February", () => {
     dueDate: "2026-01-31",
     recurrence: "monthly" as const,
   };
+
   const february = nextOccurrence(january, january.dueDate)!;
   assert.equal(
     nextOccurrence(february, january.dueDate)?.dueDate,
@@ -44,8 +47,11 @@ test("yearly recurrence restores leap day instead of permanently drifting", () =
     dueDate: "2024-02-29",
     recurrence: "yearly" as const,
   };
-  for (let i = 0; i < 4; i++)
+
+  for (let i = 0; i < 4; i++) {
     current = nextOccurrence(current, "2024-02-29")! as typeof current;
+  }
+
   assert.equal(current.dueDate, "2028-02-29");
 });
 test("DST gaps shift forward and ambiguous wall times choose the earlier instant", () => {
@@ -55,6 +61,7 @@ test("DST gaps shift forward and ambiguous wall times choose the earlier instant
     dueAt: "2026-03-07T07:30:00.000Z",
     recurrence: "daily" as const,
   };
+
   const gap = nextOccurrence(content, content.dueAt)!;
   assert.equal(gap.dueAt, "2026-03-08T07:30:00.000Z");
   assert.equal(

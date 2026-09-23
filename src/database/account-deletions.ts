@@ -6,7 +6,9 @@ import { checked } from "../libs/database";
 export const createAccountDeletion = async (db: DatabaseClient) => {
   const { error } = await db.rpc("prepare_account_deletion");
 
-  if (error) databaseError(error);
+  if (error) {
+    databaseError(error);
+  }
 };
 
 export const listPendingAccountDeletions = async () => {
@@ -35,5 +37,7 @@ export const deleteAccountData = async (userId: string) => {
     p_user: userId,
   });
 
-  if (error) databaseError(error);
+  if (error) {
+    databaseError(error);
+  }
 };

@@ -11,10 +11,12 @@ import { POST as accept } from "../app/api/invitations/accept/route";
 import { POST as deleteAccount } from "../app/api/account/delete/route";
 import { POST as unknownRoute } from "../app/api/[...path]/route";
 import { GET as health } from "../app/api/health/route";
+
 const userId = crypto.randomUUID(),
   proposalId = crypto.randomUUID(),
   reviewId = crypto.randomUUID(),
   spaceId = crypto.randomUUID();
+
 const environment = {
   SUPABASE_URL: "https://pox-test.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "test-publishable",
@@ -23,21 +25,28 @@ const environment = {
   OPENAI_TEXT_MODEL: "test-model",
   OPENAI_TRANSCRIPTION_MODEL: "test-transcription",
 };
+
 const original = Object.fromEntries(
   Object.keys(environment).map((key) => [key, process.env[key]]),
 );
+
 Object.assign(process.env, environment);
 after(() => {
   for (const [key, value] of Object.entries(original)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
   }
 });
+
 const input = {
   text: "Remind me tomorrow",
   timeZone: "UTC",
   referenceTime: "2026-09-23T00:00:00Z",
 };
+
 const request = (body: string, type = "application/json", authorized = true) =>
   new Request("http://localhost/api/test", {
     method: "POST",
@@ -47,6 +56,7 @@ const request = (body: string, type = "application/json", authorized = true) =>
     },
     body,
   });
+
 const preparation = () => ({
   summary: "Buy milk",
   question: null,
@@ -62,7 +72,9 @@ const preparation = () => ({
     },
   ],
 });
+
 type Call = { url: URL; method: string; body: unknown };
+
 const serviceMock = (
   t: TestContext,
   override?: (call: Call) => Response | undefined,
@@ -75,51 +87,87 @@ const serviceMock = (
       const req = input instanceof Request ? input : new Request(input, init);
       const body = await req.clone().text();
       let parsed: unknown = body;
+
       try {
         parsed = JSON.parse(body);
       } catch {}
+
       const call = { url: new URL(req.url), method: req.method, body: parsed };
       calls.push(call);
       const custom = override?.(call);
-      if (custom) return custom;
+
+      if (custom) {
+        return custom;
+      }
+
       const path = call.url.pathname;
-      if (path === "/auth/v1/user")
+
+      if (path === "/auth/v1/user") {
         return Response.json({
           id: userId,
           aud: "authenticated",
           role: "authenticated",
         });
-      if (path === "/rest/v1/rpc/consume_rate") return Response.json(true);
-      if (path === "/rest/v1/ai_reviews")
+      }
+
+      if (path === "/rest/v1/rpc/consume_rate") {
+        return Response.json(true);
+      }
+
+      if (path === "/rest/v1/ai_reviews") {
         return Response.json(
           call.method === "POST"
             ? { id: reviewId }
             : { sources: {}, expires_at: "2099-01-01T00:00:00Z" },
         );
-      if (path === "/rest/v1/ai_proposals") return Response.json(null);
+      }
+
+      if (path === "/rest/v1/ai_proposals") {
+        return Response.json(null);
+      }
+
       if (
         ["/rest/v1/records", "/rest/v1/spaces", "/rest/v1/profiles"].includes(
           path,
         )
-      )
+      ) {
         return Response.json([]);
-      if (path === "/rest/v1/rpc/prepare_proposal")
+      }
+
+      if (path === "/rest/v1/rpc/prepare_proposal") {
         return Response.json(proposalId);
-      if (path === "/rest/v1/rpc/apply_proposal") return Response.json([]);
-      if (path === "/rest/v1/rpc/accept_invite") return Response.json(spaceId);
+      }
+
+      if (path === "/rest/v1/rpc/apply_proposal") {
+        return Response.json([]);
+      }
+
+      if (path === "/rest/v1/rpc/accept_invite") {
+        return Response.json(spaceId);
+      }
+
       if (
         [
           "/rest/v1/rpc/prepare_account_deletion",
           "/rest/v1/rpc/cleanup_account",
         ].includes(path)
-      )
+      ) {
         return Response.json(null);
-      if (path === "/auth/v1/admin/users/" + userId)
+      }
+
+      if (path === "/auth/v1/admin/users/" + userId) {
         return Response.json({ user: { id: userId } });
-      if (path === "/rest/v1/account_deletions") return Response.json(null);
-      if (path === "/v1/audio/transcriptions")
+      }
+
+      if (path === "/rest/v1/account_deletions") {
+        return Response.json(null);
+      }
+
+      if (path === "/v1/audio/transcriptions") {
         return Response.json({ text: "Buy milk tomorrow" });
-      if (path === "/v1/responses")
+      }
+
+      if (path === "/v1/responses") {
         return Response.json({
           id: "resp_test",
           object: "response",
@@ -144,13 +192,18 @@ const serviceMock = (
             },
           ],
         });
+      }
+
       throw new Error("Unexpected mocked service path: " + path);
     },
   );
+
   return calls;
 };
+
 test("all protected route exports reject unauthenticated requests before accessing services", async (t) => {
   const calls = serviceMock(t);
+
   for (const route of [
     interpret,
     prepare,
@@ -166,19 +219,23 @@ test("all protected route exports reject unauthenticated requests before accessi
     assert.equal(body.requestId, result.headers.get("x-request-id"));
     assert.equal(result.headers.get("cache-control"), "no-store");
   }
+
   assert.equal(calls.length, 0);
-  for (const value of ["", "Basic secret", "Bearer a b", "Bearer "])
+
+  for (const value of ["", "Basic secret", "Bearer a b", "Bearer "]) {
     await assert.rejects(
       authenticate(
         new Request("http://localhost", { headers: { authorization: value } }),
       ),
       (e: unknown) => e instanceof HttpError && e.status === 401,
     );
+  }
 });
 test("all protected routes rate limit before reading input or changing data", async (t) => {
   const calls = serviceMock(t, (c) =>
     c.url.pathname.endsWith("/consume_rate") ? Response.json(false) : undefined,
   );
+
   for (const route of [
     interpret,
     prepare,
@@ -191,6 +248,7 @@ test("all protected routes rate limit before reading input or changing data", as
     assert.equal(result.status, 429);
     assert.equal(result.headers.get("retry-after"), "3600");
   }
+
   assert.ok(
     calls.every(
       (c) =>
@@ -198,9 +256,11 @@ test("all protected routes rate limit before reading input or changing data", as
         c.url.pathname.endsWith("/consume_rate"),
     ),
   );
+
   const rates = calls
     .filter((c) => c.url.pathname.endsWith("/consume_rate"))
     .map((c) => c.body as { p_bucket: string; p_max: number });
+
   assert.equal(rates.find((r) => r.p_bucket === "ai/transcribe")?.p_max, 30);
   assert.ok(
     rates
@@ -235,11 +295,13 @@ test("interpret route validates input, retrieves records and creates a review", 
 });
 test("prepare route preserves reviewed actions and retries without recreating mutations", async (t) => {
   let replay = false;
+
   const calls = serviceMock(t, (c) =>
     c.url.pathname === "/rest/v1/ai_proposals" && replay
       ? Response.json({ id: proposalId })
       : undefined,
   );
+
   const value = preparation();
   let result = await prepare(request(JSON.stringify(value)));
   assert.equal(result.status, 200);
@@ -258,34 +320,45 @@ test("prepare route preserves reviewed actions and retries without recreating mu
 });
 test("prepare refuses expired reviews and invalid group assignments before mutation", async (t) => {
   let expired = true;
+
   const calls = serviceMock(t, (c) => {
-    if (c.url.pathname === "/rest/v1/ai_reviews")
+    if (c.url.pathname === "/rest/v1/ai_reviews") {
       return Response.json({
         sources: {},
         expires_at: expired ? "2000-01-01T00:00:00Z" : "2099-01-01T00:00:00Z",
       });
-    if (c.url.pathname === "/rest/v1/members")
+    }
+
+    if (c.url.pathname === "/rest/v1/members") {
       return Response.json([{ user_id: userId, role: "viewer" }]);
+    }
   });
+
   const value = preparation();
   assert.equal((await prepare(request(JSON.stringify(value)))).status, 410);
   expired = false;
+
   const shared = {
     ...value,
     actions: value.actions.map((a) => ({ ...a, spaceId })),
   };
+
   assert.equal((await prepare(request(JSON.stringify(shared)))).status, 403);
   assert.ok(!calls.some((c) => c.url.pathname.endsWith("/prepare_proposal")));
 });
 test("apply and invitation routes validate identifiers and preserve RPC errors", async (t) => {
   let conflict = false;
+
   const calls = serviceMock(t, (c) =>
     conflict && c.url.pathname.endsWith("/apply_proposal")
       ? Response.json({ message: "CONFLICT", code: "P0001" }, { status: 400 })
       : undefined,
   );
-  for (const route of [apply, accept])
+
+  for (const route of [apply, accept]) {
     assert.equal((await route(request("{}"))).status, 400);
+  }
+
   assert.ok(
     !calls.some((c) => /apply_proposal|accept_invite/.test(c.url.pathname)),
   );
@@ -307,11 +380,13 @@ test("apply and invitation routes validate identifiers and preserve RPC errors",
 });
 test("account deletion validates confirmation, prepares deletion, and reports retry state", async (t) => {
   let fail = false;
+
   const calls = serviceMock(t, (c) =>
     fail && c.url.pathname.startsWith("/auth/v1/admin/users/")
       ? Response.json({ message: "temporary failure" }, { status: 500 })
       : undefined,
   );
+
   assert.equal(
     (await deleteAccount(request(JSON.stringify({ confirm: "no" })))).status,
     400,
@@ -325,20 +400,24 @@ test("account deletion validates confirmation, prepares deletion, and reports re
     ).json(),
     { deleted: true },
   );
+
   const mutations = calls
     .filter(
       (c) => c.method !== "GET" && !c.url.pathname.endsWith("/consume_rate"),
     )
     .map((c) => c.url.pathname);
+
   assert.deepEqual(mutations, [
     "/rest/v1/rpc/prepare_account_deletion",
     "/rest/v1/rpc/cleanup_account",
     "/auth/v1/admin/users/" + userId,
   ]);
   fail = true;
+
   const result = await deleteAccount(
     request(JSON.stringify({ confirm: "DELETE" })),
   );
+
   assert.equal(result.status, 503);
   assert.equal((await result.json()).code, "DELETION_PENDING");
 });
@@ -351,6 +430,7 @@ test("transcription route validates audio and returns provider text", async (t) 
     "audio",
     new File([new Uint8Array(10)], "clip.m4a", { type: "audio/mp4" }),
   );
+
   const result = await transcribe(
     new Request("http://localhost", {
       method: "POST",
@@ -358,6 +438,7 @@ test("transcription route validates audio and returns provider text", async (t) 
       body: form,
     }),
   );
+
   assert.equal(result.status, 200);
   assert.deepEqual(await result.json(), { text: "Buy milk tomorrow" });
 });
@@ -365,11 +446,12 @@ test("provider failures return a safe response without persisting a review", asy
   const calls = serviceMock(t, (c) =>
     c.url.pathname === "/v1/responses"
       ? Response.json(
-          { error: { message: "secret-provider-key" } },
-          { status: 500 },
-        )
+        { error: { message: "secret-provider-key" } },
+        { status: 500 },
+      )
       : undefined,
   );
+
   const result = await interpret(request(JSON.stringify(input)));
   assert.equal(result.status, 502);
   assert.ok(!(await result.text()).includes("secret-provider-key"));
@@ -377,6 +459,7 @@ test("provider failures return a safe response without persisting a review", asy
 });
 test("streamed JSON is bounded even without Content-Length", async () => {
   let cancelled = false;
+
   const stream = new ReadableStream({
     pull(c) {
       c.enqueue(new Uint8Array(60_000));
@@ -385,12 +468,14 @@ test("streamed JSON is bounded even without Content-Length", async () => {
       cancelled = true;
     },
   });
+
   const req = new Request("http://localhost", {
     method: "POST",
     body: stream,
     headers: { "Content-Type": "application/json" },
     duplex: "half",
   } as RequestInit);
+
   await assert.rejects(
     json(req),
     (e: unknown) => e instanceof HttpError && e.status === 413,
@@ -413,6 +498,7 @@ test("audio rejects empty, unsupported and oversized recordings before transcrip
       HttpError,
     );
   }
+
   const form = new FormData();
   form.append(
     "audio",

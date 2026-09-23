@@ -10,14 +10,17 @@ import {
   buildActions,
   boundedSources,
 } from "../src/libs/ai/domain";
+
 const user = crypto.randomUUID();
 test("retrieval budgets preserve whole records rather than truncate authoritative fields", () => {
   const first = record(),
     second = record();
+
   const limit = Buffer.byteLength(JSON.stringify(first));
   assert.deepEqual(boundedSources([first, second], limit), [first]);
   assert.equal(first.content.notes, "Keep these instructions");
 });
+
 const record = (kind: PoxRecord["kind"] = "reminder"): PoxRecord => {
   return {
     id: crypto.randomUUID(),
@@ -34,6 +37,7 @@ const record = (kind: PoxRecord["kind"] = "reminder"): PoxRecord => {
     deleted: false,
   };
 };
+
 test("model schema converts to a strict structured output format", () => {
   const format = zodTextFormat(modelProposalSchema, "test");
   assert.equal(format.type, "json_schema");
@@ -82,6 +86,7 @@ test("Context instances copy the user's definition and receive fresh step identi
       instructions: "Do this carefully",
     },
   ];
+
   const result = normalizeProposal(
     {
       summary: "Start",
@@ -102,6 +107,7 @@ test("Context instances copy the user's definition and receive fresh step identi
     },
     [template],
   );
+
   const item = result.actions[0].content.items[0];
   assert.equal(item.instructions, "Do this carefully");
   assert.equal(item.required, true);
@@ -110,6 +116,7 @@ test("Context instances copy the user's definition and receive fresh step identi
 });
 test("prepared actions preserve reviewed fields and reject stale source or template versions", () => {
   const source = record();
+
   const proposal: Proposal = {
     summary: "Change title",
     question: null,
@@ -123,6 +130,7 @@ test("prepared actions preserve reviewed fields and reject stale source or templ
       },
     ],
   };
+
   const result = buildActions(proposal, [source], [source], user);
   assert.equal(result[0].expectedVersion, 3);
   assert.equal(result[0].record.content.notes, source.content.notes);

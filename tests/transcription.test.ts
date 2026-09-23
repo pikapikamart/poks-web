@@ -22,6 +22,7 @@ test("transcription errors distinguish model access, quota, rate limits and inva
         new Headers(),
       ),
     );
+
     assert.equal(error.status, expectedStatus);
     assert.equal(error.code, expectedCode);
     assert.ok(!error.message.includes("private provider detail"));

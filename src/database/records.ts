@@ -1,5 +1,6 @@
 import type { DatabaseClient } from "./types/client";
 import { checked } from "../libs/database";
+
 export const findRecordsBySearchTerms = async (
   db: DatabaseClient,
   terms: string,

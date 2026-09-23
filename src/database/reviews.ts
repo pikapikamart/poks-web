@@ -16,7 +16,9 @@ export const createReview = async (userId: string, records: PoxRecord[]) => {
       .single(),
   );
 
-  if (!review) throw new Error("Review creation returned no data");
+  if (!review) {
+    throw new Error("Review creation returned no data");
+  }
 
   return review.id;
 };

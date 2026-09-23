@@ -9,27 +9,36 @@ import {
   scheduleFor,
   type Attempt,
 } from "../src/libs/notifications/domain";
+
 test("accepted devices are persisted before the next send and not resent on partial retries", async () => {
   const attempts: Attempt[] = [
-      { token: "one", status: "pending" },
-      { token: "two", status: "pending" },
-    ],
+    { token: "one", status: "pending" },
+    { token: "two", status: "pending" },
+  ],
     events: string[] = [];
+
   let fail = true;
+
   const ports = {
     eligible: async () => true,
     send: async (token: string) => {
       events.push(`send:${token}`);
-      if (token === "two" && fail) throw Error("lost response");
+
+      if (token === "two" && fail) {
+        throw Error("lost response");
+      }
+
       return { status: "ok" as const, id: `ticket:${token}` };
     },
     persist: async (token: string, outcome: { status: string }) => {
       events.push(`persist:${token}`);
       attempts.find((a) => a.token === token)!.status = outcome.status;
+
       return true;
     },
     retire: async () => {},
   };
+
   await deliverToDevices(attempts, ports);
   assert.deepEqual(events, [
     "send:one",
@@ -54,10 +63,12 @@ test("revoked eligibility cancels and a lost lease stops the batch", async () =>
       eligible: async () => false,
       send: async () => {
         sent++;
+
         return { status: "ok", id: "x" };
       },
       persist: async () => {
         persisted++;
+
         return false;
       },
       retire: async () => {},
@@ -76,6 +87,7 @@ test("invalid tokens are retired and receipts expire instead of polling forever"
     }),
     persist: async (_, r) => {
       assert.equal(r.status, "failed");
+
       return true;
     },
     retire: async (token) => {
@@ -98,13 +110,16 @@ test("undated and completed records stay quiet; quiet hours do not stack nudges 
     deleted: false,
     content: { ...blankContent(), title: "Remember" },
   };
+
   assert.deepEqual(scheduleFor(record, defaultPreferences, 0), []);
   record.content.dueAt = "2026-09-23T23:00:00Z";
+
   const jobs = scheduleFor(
     record,
     { ...defaultPreferences, quietStart: 22, quietEnd: 7, repeatMinutes: 10 },
     Date.parse("2026-09-23T20:00:00Z"),
   );
+
   assert.equal(jobs[0].due_at, "2026-09-24T07:00:00.000Z");
   assert.ok(!jobs.some((j) => j.kind === "nudge"));
   assert.equal(new Set(jobs.map((j) => j.due_at)).size, jobs.length);

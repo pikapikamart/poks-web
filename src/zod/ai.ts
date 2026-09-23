@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { contentSchema, itemSchema, recordSchema } from "./records";
 import { uuid, zoneSchema } from "./common";
+
 export const proposalSchema = z.object({
   summary: z.string(),
   question: z.string().nullable(),

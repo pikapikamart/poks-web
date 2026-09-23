@@ -36,7 +36,7 @@ npm run supabase:status
 | `supabase:dump`                          | Dump the schema to `supabase/schema.sql` (ignored by Git) |
 | `supabase:push:dry`                      | Preview pending migrations                                |
 | `supabase:push`                          | Apply pending migrations                                  |
-| `supabase:gentypes`                      | Generate `src/database/types/database.ts` for the backend |
+| `supabase:gentypes`                      | Generate `src/database/types/index.ts` for the backend    |
 | `supabase:status`                        | Show migration history                                    |
 
 For the initial database setup, run `supabase:push:dry`, then `supabase:push`
@@ -106,7 +106,7 @@ Monitor structured events `request_failed`, `outbox_failed`, `delivery_failed`, 
 
 ## Independent projects
 
-This folder has its own package manifest, lockfile, dependencies, and commands. There is no parent npm workspace. Validation schemas live in `src/zod`; reusable domain behavior lives in `src/libs`. Keep compatible API changes in both projects and run each project's tests. After generating backend database types, copy `web/src/database/types/database.ts` to `mobile/src/contracts/database.ts` when updating the mobile client. Product requirements are in `context.md` and `technical.md`.
+This folder has its own package manifest, lockfile, dependencies, and commands. There is no parent npm workspace. Validation schemas live in `src/zod`; reusable domain behavior lives in `src/libs`. Keep compatible API changes in both projects and run each project's tests. After generating backend database types, copy `web/src/database/types/index.ts` to `mobile/src/contracts/database.ts` when updating the mobile client. Product requirements are in `context.md` and `technical.md`.
 
 ## Source layout
 
@@ -114,10 +114,10 @@ Each `app/api/**/route.ts` owns its HTTP method, authentication, rate limiting, 
 
 ```text
 app/api/                Route handlers and request workflows
-src/database/           Database clients, queries and mutations by domain
+src/database/           Table-focused queries and mutations
 src/database/types/     Generated database types and database-only aliases
+src/supabase/           Authenticated and server Supabase clients
 src/libs/               HTTP, configuration, AI and notification helpers
-src/zod/                Backend validation and provider response schemas
 src/zod/                Reusable validation and API schemas
 src/trigger/            Scheduled worker entry points
 ```

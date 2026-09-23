@@ -1,4 +1,5 @@
 import type { Content } from "../zod/records";
+
 export const blankContent = (timeZone = "UTC"): Content => {
   return {
     title: "",
@@ -18,6 +19,7 @@ export const blankContent = (timeZone = "UTC"): Content => {
 
 export const completion = (content: Content): boolean => {
   const required = content.items.filter((i) => i.required);
+
   return content.items.length
     ? required.length
       ? required.every((i) => i.completed)

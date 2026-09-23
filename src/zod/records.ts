@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { uuid, zoneSchema } from "./common";
+
 export const itemSchema = z.object({
   id: uuid,
   title: z.string().trim().min(1).max(200),

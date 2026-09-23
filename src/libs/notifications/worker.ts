@@ -13,27 +13,34 @@ import type {
 } from "../../database/types/notifications";
 import { expoRequest } from "./expo";
 import { deliverToDevices, receiptOutcome, scheduleFor } from "./domain";
+
 const checked = <T>({ data, error }: { data: T; error: unknown }): T => {
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
+
   return data;
 };
+
 const recipients = async (record: PoxRecord) => {
   const users = record.space_id
     ? (
-        checked(
-          await createServerClient()
-            .from("members")
-            .select("user_id")
-            .eq("space_id", record.space_id),
-        ) ?? []
-      ).map((r) => r.user_id)
+      checked(
+        await createServerClient()
+          .from("members")
+          .select("user_id")
+          .eq("space_id", record.space_id),
+      ) ?? []
+    ).map((r) => r.user_id)
     : [record.owner_id];
+
   const deleting = checked(
     await createServerClient()
       .from("account_deletions")
       .select("user_id")
       .in("user_id", users),
   );
+
   return users.filter(
     (id): id is string => !!id && !deleting?.some((d) => d.user_id === id),
   );
@@ -47,6 +54,7 @@ const preferences = async (user: string) => {
       .eq("id", user)
       .maybeSingle(),
   );
+
   return row ? preferencesSchema.parse(row.preferences) : defaultPreferences;
 };
 
@@ -64,6 +72,7 @@ const generation = async (user: string) => {
 
 export const expandOutbox = async () => {
   const db = createServerClient();
+
   const events = checked(
     await db
       .from("outbox")
@@ -73,6 +82,7 @@ export const expandOutbox = async () => {
       .order("id")
       .limit(100),
   );
+
   for (const event of events ?? []) {
     try {
       const raw = checked(
@@ -82,8 +92,10 @@ export const expandOutbox = async () => {
           .eq("id", event.record_id)
           .maybeSingle(),
       );
+
       if (raw) {
         const record = recordSchema.parse(raw);
+
         if (record.version === event.revision) {
           checked(
             await db
@@ -93,9 +105,11 @@ export const expandOutbox = async () => {
               .neq("revision", record.version)
               .in("status", ["pending", "sending"]),
           );
+
           for (const user of await recipients(record)) {
             const prefs = await preferences(user),
               epoch = await generation(user);
+
             const sent =
               checked(
                 await db
@@ -106,8 +120,12 @@ export const expandOutbox = async () => {
                   .eq("user_id", user)
                   .eq("status", "sent"),
               ) ?? [];
+
             for (const job of scheduleFor(record, prefs, Date.now())) {
-              if (sent.some((s) => s.kind === job.kind)) continue;
+              if (sent.some((s) => s.kind === job.kind)) {
+                continue;
+              }
+
               checked(
                 await db.from("deliveries").upsert(
                   {
@@ -127,6 +145,7 @@ export const expandOutbox = async () => {
           }
         }
       }
+
       checked(
         await db
           .from("outbox")
@@ -153,13 +172,16 @@ export const expandOutbox = async () => {
     }
   }
 };
+
 export const advanceRecurrences = async () => {
   const db = createServerClient(),
     rows = checked(await db.rpc("due_recurrences"));
+
   for (const raw of rows ?? []) {
     try {
       const record = recordSchema.parse(raw),
         next = nextOccurrence(record.content, raw.recurrence_anchor);
+
       if (next) {
         const users = await recipients(record);
         next.items = next.items.map((i) => ({
@@ -191,7 +213,9 @@ const eligibleRecord = async (job: Delivery) => {
       .eq("id", job.record_id)
       .maybeSingle(),
   );
+
   const record = raw ? recordSchema.parse(raw) : null;
+
   if (
     !record ||
     record.version !== job.revision ||
@@ -200,13 +224,18 @@ const eligibleRecord = async (job: Delivery) => {
     (!job.kind.startsWith("activity:") && record.content.completed) ||
     !(await recipients(record).then((users) => users.includes(job.user_id))) ||
     (await generation(job.user_id)) !== job.generation
-  )
+  ) {
     return null;
+  }
+
   return record;
 };
 
 const finish = async (job: Delivery, values: DeliveryUpdate) => {
-  if (!job.claim_token) return;
+  if (!job.claim_token) {
+    return;
+  }
+
   checked(
     await createServerClient()
       .from("deliveries")
@@ -221,16 +250,20 @@ const finish = async (job: Delivery, values: DeliveryUpdate) => {
 export const sendDueNotifications = async () => {
   const db = createServerClient(),
     jobs = checked(await db.rpc("claim_deliveries", { p_limit: 10 }));
+
   for (const job of jobs ?? []) {
     try {
       const record = await eligibleRecord(job);
+
       if (!record) {
         await finish(job, { status: "cancelled" });
         continue;
       }
+
       const prefs = await preferences(job.user_id),
         now = Date.now(),
         allowed = afterQuietHours(new Date(now).toISOString(), prefs);
+
       if (new Date(allowed).getTime() > now + 1000) {
         await finish(job, {
           status: "pending",
@@ -239,6 +272,7 @@ export const sendDueNotifications = async () => {
         });
         continue;
       }
+
       if (
         job.kind === "nudge" &&
         Date.parse(dueTime(record.content, prefs) ?? "1970-01-01") <= now
@@ -246,11 +280,13 @@ export const sendDueNotifications = async () => {
         await finish(job, { status: "cancelled" });
         continue;
       }
+
       const body =
         job.body ??
         (job.kind === "nudge"
           ? `Coming up: ${record.content.title}`
           : record.content.title);
+
       checked(
         await db.from("inbox").upsert(
           {
@@ -262,17 +298,21 @@ export const sendDueNotifications = async () => {
           { onConflict: "event_key", ignoreDuplicates: true },
         ),
       );
+
       const devices =
         checked(
           await db.from("devices").select("token").eq("user_id", job.user_id),
         ) ?? [];
-      if (devices.length)
+
+      if (devices.length) {
         checked(
           await db.from("device_deliveries").upsert(
             devices.map((d) => ({ delivery_id: job.id, token: d.token })),
             { onConflict: "delivery_id,token", ignoreDuplicates: true },
           ),
         );
+      }
+
       const previous =
         checked(
           await db
@@ -284,6 +324,7 @@ export const sendDueNotifications = async () => {
             .eq("kind", job.kind)
             .neq("id", job.id),
         ) ?? [];
+
       if (previous.length) {
         const accepted =
           checked(
@@ -296,7 +337,8 @@ export const sendDueNotifications = async () => {
               )
               .eq("status", "accepted"),
           ) ?? [];
-        if (accepted.length)
+
+        if (accepted.length) {
           checked(
             await db
               .from("device_deliveries")
@@ -308,7 +350,9 @@ export const sendDueNotifications = async () => {
                 accepted.map((a) => a.token),
               ),
           );
+        }
       }
+
       const attempts =
         checked(
           await db
@@ -316,6 +360,7 @@ export const sendDueNotifications = async () => {
             .select("token,status")
             .eq("delivery_id", job.id),
         ) ?? [];
+
       await deliverToDevices(attempts, {
         eligible: async (token) => {
           const lease = checked(
@@ -328,7 +373,11 @@ export const sendDueNotifications = async () => {
               .gt("lease_until", new Date().toISOString())
               .maybeSingle(),
           );
-          if (!lease || !(await eligibleRecord(job))) return false;
+
+          if (!lease || !(await eligibleRecord(job))) {
+            return false;
+          }
+
           const device = checked(
             await db
               .from("devices")
@@ -337,10 +386,12 @@ export const sendDueNotifications = async () => {
               .eq("user_id", job.user_id)
               .maybeSingle(),
           );
+
           return !!device;
         },
         send: async (token) => {
           const p = await preferences(job.user_id);
+
           const value = await expoRequest("send", {
             to: token,
             title: job.kind === "nudge" ? "A little nudge" : "Pox remembers",
@@ -363,6 +414,7 @@ export const sendDueNotifications = async () => {
               ? "high"
               : "normal",
           });
+
           return pushTicketResponseSchema.parse(value).data;
         },
         persist: async (token, result) => {
@@ -389,6 +441,7 @@ export const sendDueNotifications = async () => {
           );
         },
       });
+
       const results =
         checked(
           await db
@@ -396,8 +449,10 @@ export const sendDueNotifications = async () => {
             .select("status")
             .eq("delivery_id", job.id),
         ) ?? [];
+
       const pending = results.some((r) => r.status === "pending"),
         failed = results.some((r) => r.status === "failed");
+
       await finish(job, {
         status: pending
           ? job.attempts >= 5
@@ -438,17 +493,26 @@ export const inspectReceipts = async () => {
         .order("accepted_at")
         .limit(100),
     );
-  if (!rows?.length) return;
+
+  if (!rows?.length) {
+    return;
+  }
+
   const result = pushReceiptsResponseSchema.parse(
     await expoRequest("getReceipts", { ids: rows.map((r) => r.ticket_id) }),
   );
+
   for (const row of rows) {
     const outcome = receiptOutcome(
       result.data[row.ticket_id!],
       Date.parse(row.accepted_at!),
       Date.now(),
     );
-    if (outcome === null) continue;
+
+    if (outcome === null) {
+      continue;
+    }
+
     checked(
       await db.rpc("record_push_receipt", {
         p_job: row.delivery_id,
