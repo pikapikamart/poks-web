@@ -1,27 +1,27 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   json,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { interpretSchema } from "../../../../src/zod/ai";
-import { recordSchema } from "../../../../src/zod/records";
+} from "@/libs/api/rate-limit";
+import { interpretSchema } from "@/zod/ai";
+import { recordSchema } from "@/zod/records";
 import {
   findRecordsBySearchTerms,
   listContextRecords,
   listRecentRecords,
-} from "../../../../src/database/records";
-import { listSpaces } from "../../../../src/database/spaces";
-import { listProfiles } from "../../../../src/database/profiles";
-import { createReview } from "../../../../src/database/reviews";
-import { boundedSources } from "../../../../src/libs/ai/domain";
-import { interpretThought } from "../../../../src/libs/ai/interpret";
+} from "@/database/records";
+import { listSpaces } from "@/database/spaces";
+import { listProfiles } from "@/database/profiles";
+import { createReview } from "@/database/reviews";
+import { boundedSources } from "@/libs/ai/domain";
+import { interpretThought } from "@/libs/ai/interpret";
 
 export const runtime = "nodejs";
 

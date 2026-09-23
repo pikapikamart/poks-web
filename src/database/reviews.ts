@@ -1,6 +1,6 @@
-import { createServerClient } from "../supabase";
-import type { PoxRecord } from "../zod/records";
-import { checked } from "../libs/database";
+import { createServerClient } from "@/supabase";
+import type { PoxRecord } from "@/zod/records";
+import { checked } from "@/libs/database";
 
 export const createReview = async (userId: string, records: PoxRecord[]) => {
   const review = checked(

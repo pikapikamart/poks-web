@@ -1,11 +1,11 @@
 import { schedules } from "@trigger.dev/sdk";
-import { retryPendingAccountDeletions } from "../libs/account-deletions";
+import { retryPendingAccountDeletions } from "@/libs/account-deletions";
 import {
   advanceRecurrences,
   expandOutbox,
   inspectReceipts,
   sendDueNotifications,
-} from "../libs/notifications/worker";
+} from "@/libs/notifications/worker";
 
 export const reminders = schedules.task({
   id: "pox-reminders",

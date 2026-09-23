@@ -1,13 +1,13 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
-import { blankContent } from "../records";
-import { interpretSchema } from "../../zod/ai";
-import { type PoxRecord } from "../../zod/records";
-import { env } from "../env";
-import { HttpError } from "../http";
-import { modelProposalSchema } from "../../zod/ai";
-import { normalizeProposal } from "./domain";
+import { blankContent } from "@/libs/records";
+import { interpretSchema } from "@/zod/ai";
+import { type PoxRecord } from "@/zod/records";
+import { env } from "@/libs/env";
+import { HttpError } from "@/libs/http";
+import { modelProposalSchema } from "@/zod/ai";
+import { normalizeProposal } from "@/libs/ai/domain";
 
 export const interpretThought = async (
   input: z.infer<typeof interpretSchema>,

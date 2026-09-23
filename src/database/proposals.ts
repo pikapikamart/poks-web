@@ -1,10 +1,10 @@
 import type { z } from "zod";
-import type { Mutation } from "../zod/records";
-import type { prepareProposalSchema } from "../zod/ai";
-import type { DatabaseClient } from "./types/client";
-import { createServerClient } from "../supabase";
-import { checked } from "../libs/database";
-import { databaseError } from "../libs/http";
+import type { Mutation } from "@/zod/records";
+import type { prepareProposalSchema } from "@/zod/ai";
+import type { DatabaseClient } from "@/database/types/client";
+import { createServerClient } from "@/supabase";
+import { checked } from "@/libs/database";
+import { databaseError } from "@/libs/http";
 
 export const findProposalByRequestId = async (
   userId: string,

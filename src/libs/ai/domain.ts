@@ -1,12 +1,8 @@
 import type { z } from "zod";
-import { modelProposalSchema } from "../../zod/ai";
-import {
-  contentSchema,
-  type PoxRecord,
-  type Mutation,
-} from "../../zod/records";
-import { proposalSchema, type Proposal } from "../../zod/ai";
-import { HttpError } from "../http";
+import { modelProposalSchema } from "@/zod/ai";
+import { contentSchema, type PoxRecord, type Mutation } from "@/zod/records";
+import { proposalSchema, type Proposal } from "@/zod/ai";
+import { HttpError } from "@/libs/http";
 
 export const boundedSources = (records: PoxRecord[], limit = 80_000) => {
   let used = 0;

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import { env } from "../env";
-import { HttpError } from "../http";
+import { env } from "@/libs/env";
+import { HttpError } from "@/libs/http";
 
 export const transcriptionError = (error: unknown): HttpError => {
   if (error instanceof HttpError) {

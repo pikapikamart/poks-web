@@ -2,8 +2,8 @@ import {
   deleteAccountData,
   listPendingAccountDeletions,
   updateAccountDeletionError,
-} from "../database/account-deletions";
-import { deleteUserById } from "../database/users";
+} from "@/database/account-deletions";
+import { deleteUserById } from "@/database/users";
 
 export const completeAccountDeletion = async (userId: string) => {
   await deleteAccountData(userId);

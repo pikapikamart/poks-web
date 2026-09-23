@@ -1,18 +1,18 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   json,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { uuid } from "../../../../src/zod/common";
-import { acceptInvitationSchema } from "../../../../src/zod/invitations";
-import { acceptInvitation } from "../../../../src/database/invitations";
+} from "@/libs/api/rate-limit";
+import { uuid } from "@/zod/common";
+import { acceptInvitationSchema } from "@/zod/invitations";
+import { acceptInvitation } from "@/database/invitations";
 
 export const runtime = "nodejs";
 

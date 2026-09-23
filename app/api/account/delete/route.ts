@@ -1,19 +1,19 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   HttpError,
   json,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { deleteAccountSchema } from "../../../../src/zod/accounts";
-import { createAccountDeletion } from "../../../../src/database/account-deletions";
-import { completeAccountDeletion } from "../../../../src/libs/account-deletions";
+} from "@/libs/api/rate-limit";
+import { deleteAccountSchema } from "@/zod/accounts";
+import { createAccountDeletion } from "@/database/account-deletions";
+import { completeAccountDeletion } from "@/libs/account-deletions";
 
 export const runtime = "nodejs";
 

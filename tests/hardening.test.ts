@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blankContent } from "../src/libs/records";
-import { defaultPreferences } from "../src/libs/preferences";
+import { blankContent } from "@/libs/records";
+import { defaultPreferences } from "@/libs/preferences";
 import { database, asUser, asAdmin, alice, bob } from "./helpers/database";
 
 test("database validation, grants, review concurrency, leases and deletion recovery", async (t) => {

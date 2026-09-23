@@ -1,27 +1,24 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   HttpError,
   json,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { prepareProposalSchema } from "../../../../src/zod/ai";
-import { recordSchema } from "../../../../src/zod/records";
-import { reviewSourcesSchema } from "../../../../src/zod/ai";
-import {
-  createProposal,
-  findProposalByRequestId,
-} from "../../../../src/database/proposals";
-import { findReviewById } from "../../../../src/database/reviews";
-import { findRecordsByIds } from "../../../../src/database/records";
-import { listMembersBySpaceId } from "../../../../src/database/members";
-import { buildActions } from "../../../../src/libs/ai/domain";
+} from "@/libs/api/rate-limit";
+import { prepareProposalSchema } from "@/zod/ai";
+import { recordSchema } from "@/zod/records";
+import { reviewSourcesSchema } from "@/zod/ai";
+import { createProposal, findProposalByRequestId } from "@/database/proposals";
+import { findReviewById } from "@/database/reviews";
+import { findRecordsByIds } from "@/database/records";
+import { listMembersBySpaceId } from "@/database/members";
+import { buildActions } from "@/libs/ai/domain";
 
 export const runtime = "nodejs";
 

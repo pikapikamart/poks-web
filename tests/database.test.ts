@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
-import { blankContent } from "../src/libs/records";
+import { blankContent } from "@/libs/records";
 
 const a = "00000000-0000-4000-8000-000000000001",
   b = "00000000-0000-4000-8000-000000000002";

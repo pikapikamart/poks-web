@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zoneSchema } from "./common";
+import { zoneSchema } from "@/zod/common";
 
 export const preferencesSchema = z.object({
   timeZone: zoneSchema,

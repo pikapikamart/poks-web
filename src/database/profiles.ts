@@ -1,5 +1,5 @@
-import type { DatabaseClient } from "./types/client";
-import { checked } from "../libs/database";
+import type { DatabaseClient } from "@/database/types/client";
+import { checked } from "@/libs/database";
 
 export const listProfiles = async (db: DatabaseClient) => {
   return (

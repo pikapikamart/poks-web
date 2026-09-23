@@ -1,15 +1,15 @@
-import { modelProposalSchema } from "../src/zod/ai";
+import { modelProposalSchema } from "@/zod/ai";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { zodTextFormat } from "openai/helpers/zod";
-import { blankContent } from "../src/libs/records";
-import { type PoxRecord } from "../src/zod/records";
-import { type Proposal } from "../src/zod/ai";
+import { blankContent } from "@/libs/records";
+import { type PoxRecord } from "@/zod/records";
+import { type Proposal } from "@/zod/ai";
 import {
   normalizeProposal,
   buildActions,
   boundedSources,
-} from "../src/libs/ai/domain";
+} from "@/libs/ai/domain";
 
 const user = crypto.randomUUID();
 test("retrieval budgets preserve whole records rather than truncate authoritative fields", () => {

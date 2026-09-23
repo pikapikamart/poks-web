@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { contentSchema, itemSchema, recordSchema } from "./records";
-import { uuid, zoneSchema } from "./common";
+import { contentSchema, itemSchema, recordSchema } from "@/zod/records";
+import { uuid, zoneSchema } from "@/zod/common";
 
 export const proposalSchema = z.object({
   summary: z.string(),

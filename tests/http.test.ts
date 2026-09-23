@@ -1,8 +1,8 @@
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { authenticate } from "../src/supabase";
-import { HttpError, audio, json } from "../src/libs/http";
-import { blankContent } from "../src/libs/records";
+import { authenticate } from "@/supabase";
+import { HttpError, audio, json } from "@/libs/http";
+import { blankContent } from "@/libs/records";
 import { POST as interpret } from "../app/api/ai/interpret/route";
 import { POST as prepare } from "../app/api/ai/prepare/route";
 import { POST as apply } from "../app/api/ai/apply/route";

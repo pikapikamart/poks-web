@@ -1,4 +1,4 @@
-import type { Preferences } from "../zod/preferences";
+import type { Preferences } from "@/zod/preferences";
 
 export const defaultPreferences: Preferences = {
   timeZone: "UTC",

@@ -1,8 +1,8 @@
-import { HttpError } from "../libs/http";
-import { createAuthenticatedClient } from "./client";
+import { HttpError } from "@/libs/http";
+import { createAuthenticatedClient } from "@/supabase/client";
 
-export { createAuthenticatedClient } from "./client";
-export { createServerClient } from "./server";
+export { createAuthenticatedClient } from "@/supabase/client";
+export { createServerClient } from "@/supabase/server";
 
 export const authenticate = async (request: Request) => {
   const accessToken = request.headers

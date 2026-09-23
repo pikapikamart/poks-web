@@ -1,18 +1,18 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   json,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { recordSchema } from "../../../../src/zod/records";
-import { applyProposalSchema } from "../../../../src/zod/ai";
-import { applyProposalById } from "../../../../src/database/proposals";
+} from "@/libs/api/rate-limit";
+import { recordSchema } from "@/zod/records";
+import { applyProposalSchema } from "@/zod/ai";
+import { applyProposalById } from "@/database/proposals";
 
 export const runtime = "nodejs";
 

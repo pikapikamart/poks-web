@@ -1,7 +1,7 @@
-import { databaseError } from "../libs/http";
-import { createServerClient } from "../supabase";
-import type { DatabaseClient } from "./types/client";
-import { checked } from "../libs/database";
+import { databaseError } from "@/libs/http";
+import { createServerClient } from "@/supabase";
+import type { DatabaseClient } from "@/database/types/client";
+import { checked } from "@/libs/database";
 
 export const createAccountDeletion = async (db: DatabaseClient) => {
   const { error } = await db.rpc("prepare_account_deletion");

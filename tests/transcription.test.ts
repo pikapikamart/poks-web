@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import OpenAI from "openai";
-import { transcriptionError } from "../src/libs/ai/transcription";
-import { HttpError } from "../src/libs/http";
+import { transcriptionError } from "@/libs/ai/transcription";
+import { HttpError } from "@/libs/http";
 
 test("transcription errors distinguish model access, quota, rate limits and invalid audio", () => {
   for (const [status, code, expectedStatus, expectedCode] of [

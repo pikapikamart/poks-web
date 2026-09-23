@@ -1,5 +1,5 @@
-import { createServerClient } from "../supabase";
-import type { ApiRateLimitPolicy } from "../libs/api/rate-limit";
+import { createServerClient } from "@/supabase";
+import type { ApiRateLimitPolicy } from "@/libs/api/rate-limit";
 
 export const consumeRateLimit = async (
   subject: string,

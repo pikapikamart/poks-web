@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
-import type { PoxRecord } from "../../zod/records";
-import type { Preferences } from "../../zod/preferences";
-import { afterQuietHours, dueTime } from "../time";
+import type { PoxRecord } from "@/zod/records";
+import type { Preferences } from "@/zod/preferences";
+import { afterQuietHours, dueTime } from "@/libs/time";
 
 export const scheduleFor = (
   record: PoxRecord,

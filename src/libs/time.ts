@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
-import type { Content } from "../zod/records";
-import type { Preferences } from "../zod/preferences";
+import type { Content } from "@/zod/records";
+import type { Preferences } from "@/zod/preferences";
 
 export const nextOccurrence = (
   content: Content,

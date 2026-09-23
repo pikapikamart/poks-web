@@ -1,16 +1,16 @@
-import { authenticate } from "../../../../src/supabase";
-import { consumeRateLimit } from "../../../../src/database/rate-limits";
+import { authenticate } from "@/supabase";
+import { consumeRateLimit } from "@/database/rate-limits";
 import {
   assertRateLimit,
   audio,
   success,
   withApiErrorHandling,
-} from "../../../../src/libs/http";
+} from "@/libs/http";
 import {
   apiRateLimitPolicies,
   getAuthenticatedRateLimitSubject,
-} from "../../../../src/libs/api/rate-limit";
-import { transcribe } from "../../../../src/libs/ai/transcription";
+} from "@/libs/api/rate-limit";
+import { transcribe } from "@/libs/ai/transcription";
 
 export const runtime = "nodejs";
 

@@ -1,4 +1,4 @@
-import type { Database } from "./index";
+import type { Database } from "@/database/types";
 
 export type Delivery = Database["public"]["Tables"]["deliveries"]["Row"];
 export type DeliveryUpdate =
