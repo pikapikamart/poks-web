@@ -1,0 +1,32 @@
+# Dependencies and generated output
+node_modules/
+.next/
+out/
+dist/
+.trigger/
+.vercel/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment and private credentials (keep templates)
+.env*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*service-account*.json
+*serviceAccount*.json
+
+# Supabase local state (keep configuration and migrations)
+supabase/.temp/
+supabase/.branches/
+
+# Logs and local tooling
+*.log
+.cache/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
