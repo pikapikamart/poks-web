@@ -12,8 +12,6 @@ import {
 } from "@/libs/api/rate-limit";
 import { transcribe } from "@/libs/ai/transcription";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "ai/transcribe",
   async (request, context) => {

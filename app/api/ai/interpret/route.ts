@@ -23,8 +23,6 @@ import { createReview } from "@/database/reviews";
 import { boundedSources } from "@/libs/ai/domain";
 import { interpretThought } from "@/libs/ai/interpret";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "ai/interpret",
   async (request, context) => {

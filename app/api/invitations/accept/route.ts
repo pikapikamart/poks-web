@@ -14,8 +14,6 @@ import { uuid } from "@/zod/common";
 import { acceptInvitationSchema } from "@/zod/invitations";
 import { acceptInvitation } from "@/database/invitations";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "invitations/accept",
   async (request, context) => {

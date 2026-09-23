@@ -15,8 +15,6 @@ import { deleteAccountSchema } from "@/zod/accounts";
 import { createAccountDeletion } from "@/database/account-deletions";
 import { completeAccountDeletion } from "@/libs/account-deletions";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "account/delete",
   async (request, context) => {

@@ -20,8 +20,6 @@ import { findRecordsByIds } from "@/database/records";
 import { listMembersBySpaceId } from "@/database/members";
 import { buildActions } from "@/libs/ai/domain";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "ai/prepare",
   async (request, context) => {

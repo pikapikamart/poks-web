@@ -14,8 +14,6 @@ import { recordSchema } from "@/zod/records";
 import { applyProposalSchema } from "@/zod/ai";
 import { applyProposalById } from "@/database/proposals";
 
-export const runtime = "nodejs";
-
 export const POST = withApiErrorHandling(
   "ai/apply",
   async (request, context) => {
