@@ -15,6 +15,7 @@ export default [
         "error",
         { argsIgnorePattern: "^_" },
       ],
+      "func-style": ["error", "expression", { allowArrowFunctions: true }],
     },
   },
 ];

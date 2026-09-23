@@ -1,12 +1,13 @@
 import { DateTime } from "luxon";
-import type { PoxRecord, Preferences } from "@pox/contracts";
-import { afterQuietHours, dueTime } from "@pox/contracts/src/time";
+import type { PoxRecord } from "../../zod/records";
+import type { Preferences } from "../../zod/preferences";
+import { afterQuietHours, dueTime } from "../time";
 
-export function scheduleFor(
+export const scheduleFor = (
   record: PoxRecord,
   prefs: Preferences,
   now: number,
-) {
+) => {
   if (
     record.deleted ||
     record.kind === "context" ||
@@ -45,7 +46,7 @@ export function scheduleFor(
       }
     }
   return jobs;
-}
+};
 export type PushTicket = {
   status: "ok" | "error";
   id?: string;
@@ -57,7 +58,7 @@ type Outcome = {
   ticket: string | null;
   error: string | null;
 };
-export async function deliverToDevices(
+export const deliverToDevices = async (
   attempts: Attempt[],
   ports: {
     eligible: (token: string) => Promise<boolean>;
@@ -65,7 +66,7 @@ export async function deliverToDevices(
     persist: (token: string, outcome: Outcome) => Promise<boolean>;
     retire: (token: string) => Promise<void>;
   },
-) {
+) => {
   for (const attempt of attempts) {
     if (attempt.status !== "pending") continue;
     if (!(await ports.eligible(attempt.token))) {
@@ -104,14 +105,15 @@ export async function deliverToDevices(
     if (!(await ports.persist(attempt.token, outcome))) return;
     if (invalid) await ports.retire(attempt.token);
   }
-}
-export function receiptOutcome(
+};
+
+export const receiptOutcome = (
   receipt: PushTicket | undefined,
   acceptedAt: number,
   now: number,
-) {
+) => {
   if (!receipt) return now - acceptedAt >= 24 * 60 * 60_000 ? "expired" : null;
   return receipt.status === "ok"
     ? "delivered"
     : (receipt.details?.error ?? "error");
-}
+};

@@ -9,7 +9,7 @@ export class HttpError extends Error {
     super(message);
   }
 }
-export function databaseError(error: { message: string }): never {
+export const databaseError = (error: { message: string }): never => {
   const message = error.message;
   if (/CONFLICT/.test(message))
     throw new HttpError(
@@ -48,8 +48,9 @@ export function databaseError(error: { message: string }): never {
       "INVALID_REQUEST",
     );
   throw error;
-}
-export function failure(error: unknown, requestId = crypto.randomUUID()) {
+};
+
+export const failure = (error: unknown, requestId = crypto.randomUUID()) => {
   const mapped =
     error instanceof ZodError
       ? new HttpError(400, "Invalid request.", "INVALID_REQUEST")
@@ -79,11 +80,12 @@ export function failure(error: unknown, requestId = crypto.randomUUID()) {
       },
     },
   );
-}
-export async function boundedBody(
+};
+
+export const boundedBody = async (
   request: Request,
   limit: number,
-): Promise<Uint8Array<ArrayBuffer>> {
+): Promise<Uint8Array<ArrayBuffer>> => {
   const declared = request.headers.get("content-length");
   if (declared && (!/^\d+$/.test(declared) || Number(declared) > limit))
     throw new HttpError(413, "Request too large.", "BODY_TOO_LARGE");
@@ -112,8 +114,9 @@ export async function boundedBody(
     offset += chunk.length;
   }
   return result;
-}
-export async function json(request: Request): Promise<unknown> {
+};
+
+export const json = async (request: Request): Promise<unknown> => {
   if (
     request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !==
     "application/json"
@@ -129,8 +132,9 @@ export async function json(request: Request): Promise<unknown> {
   } catch {
     throw new HttpError(400, "Malformed JSON.", "INVALID_JSON");
   }
-}
-export async function audio(request: Request): Promise<File> {
+};
+
+export const audio = async (request: Request): Promise<File> => {
   const type = request.headers.get("content-type") ?? "";
   if (!/^multipart\/form-data\s*;/i.test(type))
     throw new HttpError(
@@ -167,4 +171,23 @@ export async function audio(request: Request): Promise<File> {
       "INVALID_AUDIO",
     );
   return file;
-}
+};
+
+export const success = (
+  body: unknown,
+  requestId: string,
+  route: string,
+  start: number,
+) => {
+  console.info(
+    JSON.stringify({
+      event: "request_complete",
+      requestId,
+      route,
+      durationMs: Date.now() - start,
+    }),
+  );
+  return Response.json(body, {
+    headers: { "X-Request-Id": requestId, "Cache-Control": "no-store" },
+  });
+};

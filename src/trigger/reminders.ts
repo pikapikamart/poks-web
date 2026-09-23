@@ -1,11 +1,11 @@
 import { schedules } from "@trigger.dev/sdk";
-import { retryAccountDeletions } from "../accounts";
+import { retryPendingAccountDeletions } from "../libs/account-deletions";
 import {
   advanceRecurrences,
   expandOutbox,
   inspectReceipts,
   sendDueNotifications,
-} from "../jobs";
+} from "../libs/notifications/worker";
 export const reminders = schedules.task({
   id: "pox-reminders",
   cron: "* * * * *",
@@ -13,7 +13,7 @@ export const reminders = schedules.task({
   run: async () => {
     const failures: unknown[] = [];
     for (const task of [
-      retryAccountDeletions,
+      retryPendingAccountDeletions,
       advanceRecurrences,
       expandOutbox,
       sendDueNotifications,

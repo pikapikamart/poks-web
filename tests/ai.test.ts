@@ -1,13 +1,15 @@
+import { modelProposalSchema } from "../src/zod/ai";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { zodTextFormat } from "openai/helpers/zod";
-import { blankContent, type PoxRecord, type Proposal } from "@pox/contracts";
+import { blankContent } from "../src/libs/records";
+import { type PoxRecord } from "../src/zod/records";
+import { type Proposal } from "../src/zod/ai";
 import {
-  modelProposalSchema,
   normalizeProposal,
   buildActions,
   boundedSources,
-} from "../src/ai-domain";
+} from "../src/libs/ai/domain";
 const user = crypto.randomUUID();
 test("retrieval budgets preserve whole records rather than truncate authoritative fields", () => {
   const first = record(),
@@ -16,7 +18,7 @@ test("retrieval budgets preserve whole records rather than truncate authoritativ
   assert.deepEqual(boundedSources([first, second], limit), [first]);
   assert.equal(first.content.notes, "Keep these instructions");
 });
-function record(kind: PoxRecord["kind"] = "reminder"): PoxRecord {
+const record = (kind: PoxRecord["kind"] = "reminder"): PoxRecord => {
   return {
     id: crypto.randomUUID(),
     owner_id: user,
@@ -31,7 +33,7 @@ function record(kind: PoxRecord["kind"] = "reminder"): PoxRecord {
     updated_at: "",
     deleted: false,
   };
-}
+};
 test("model schema converts to a strict structured output format", () => {
   const format = zodTextFormat(modelProposalSchema, "test");
   assert.equal(format.type, "json_schema");

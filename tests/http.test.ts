@@ -1,26 +1,172 @@
-import test from "node:test";
+import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import type { User } from "@supabase/supabase-js";
-import { createEndpoints } from "../src/endpoints";
-import { authenticate } from "../src/server";
-import { HttpError, audio, json } from "../src/http";
+import { authenticate } from "../src/supabase";
+import { HttpError, audio, json } from "../src/libs/http";
+import { blankContent } from "../src/libs/records";
+import { POST as interpret } from "../app/api/ai/interpret/route";
+import { POST as prepare } from "../app/api/ai/prepare/route";
+import { POST as apply } from "../app/api/ai/apply/route";
+import { POST as transcribe } from "../app/api/ai/transcribe/route";
+import { POST as accept } from "../app/api/invitations/accept/route";
+import { POST as deleteAccount } from "../app/api/account/delete/route";
 import { POST as unknownRoute } from "../app/api/[...path]/route";
-const request = (body: string, type = "application/json") =>
-  new Request("http://localhost/api/ai/interpret", {
-    method: "POST",
-    headers: { "Content-Type": type },
-    body,
-  });
+import { GET as health } from "../app/api/health/route";
+const userId = crypto.randomUUID(),
+  proposalId = crypto.randomUUID(),
+  reviewId = crypto.randomUUID(),
+  spaceId = crypto.randomUUID();
+const environment = {
+  SUPABASE_URL: "https://pox-test.supabase.co",
+  SUPABASE_PUBLISHABLE_KEY: "test-publishable",
+  SUPABASE_SECRET_KEY: "test-secret",
+  OPENAI_API_KEY: "test-openai",
+  OPENAI_TEXT_MODEL: "test-model",
+  OPENAI_TRANSCRIPTION_MODEL: "test-transcription",
+};
+const original = Object.fromEntries(
+  Object.keys(environment).map((key) => [key, process.env[key]]),
+);
+Object.assign(process.env, environment);
+after(() => {
+  for (const [key, value] of Object.entries(original)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 const input = {
   text: "Remind me tomorrow",
   timeZone: "UTC",
   referenceTime: "2026-09-23T00:00:00Z",
 };
-const session = {
-  db: {} as Awaited<ReturnType<typeof authenticate>>["db"],
-  user: { id: crypto.randomUUID() } as User,
+const request = (body: string, type = "application/json", authorized = true) =>
+  new Request("http://localhost/api/test", {
+    method: "POST",
+    headers: {
+      "Content-Type": type,
+      ...(authorized ? { Authorization: "Bearer test-token" } : {}),
+    },
+    body,
+  });
+const preparation = () => ({
+  summary: "Buy milk",
+  question: null,
+  reviewId,
+  requestId: crypto.randomUUID(),
+  actions: [
+    {
+      kind: "create",
+      targetId: null,
+      recordKind: "reminder",
+      spaceId: null,
+      content: { ...blankContent("UTC"), title: "Buy milk" },
+    },
+  ],
+});
+type Call = { url: URL; method: string; body: unknown };
+const serviceMock = (
+  t: TestContext,
+  override?: (call: Call) => Response | undefined,
+) => {
+  const calls: Call[] = [];
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      const body = await req.clone().text();
+      let parsed: unknown = body;
+      try {
+        parsed = JSON.parse(body);
+      } catch {}
+      const call = { url: new URL(req.url), method: req.method, body: parsed };
+      calls.push(call);
+      const custom = override?.(call);
+      if (custom) return custom;
+      const path = call.url.pathname;
+      if (path === "/auth/v1/user")
+        return Response.json({
+          id: userId,
+          aud: "authenticated",
+          role: "authenticated",
+        });
+      if (path === "/rest/v1/rpc/consume_rate") return Response.json(true);
+      if (path === "/rest/v1/ai_reviews")
+        return Response.json(
+          call.method === "POST"
+            ? { id: reviewId }
+            : { sources: {}, expires_at: "2099-01-01T00:00:00Z" },
+        );
+      if (path === "/rest/v1/ai_proposals") return Response.json(null);
+      if (
+        ["/rest/v1/records", "/rest/v1/spaces", "/rest/v1/profiles"].includes(
+          path,
+        )
+      )
+        return Response.json([]);
+      if (path === "/rest/v1/rpc/prepare_proposal")
+        return Response.json(proposalId);
+      if (path === "/rest/v1/rpc/apply_proposal") return Response.json([]);
+      if (path === "/rest/v1/rpc/accept_invite") return Response.json(spaceId);
+      if (
+        [
+          "/rest/v1/rpc/prepare_account_deletion",
+          "/rest/v1/rpc/cleanup_account",
+        ].includes(path)
+      )
+        return Response.json(null);
+      if (path === "/auth/v1/admin/users/" + userId)
+        return Response.json({ user: { id: userId } });
+      if (path === "/rest/v1/account_deletions") return Response.json(null);
+      if (path === "/v1/audio/transcriptions")
+        return Response.json({ text: "Buy milk tomorrow" });
+      if (path === "/v1/responses")
+        return Response.json({
+          id: "resp_test",
+          object: "response",
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              id: "msg_test",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    summary: "Clarify",
+                    question: "When?",
+                    actions: [],
+                  }),
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+        });
+      throw new Error("Unexpected mocked service path: " + path);
+    },
+  );
+  return calls;
 };
-test("malformed bearer headers fail before configuration or database access", async () => {
+test("all protected route exports reject unauthenticated requests before accessing services", async (t) => {
+  const calls = serviceMock(t);
+  for (const route of [
+    interpret,
+    prepare,
+    apply,
+    transcribe,
+    accept,
+    deleteAccount,
+  ]) {
+    const result = await route(request("{}", "application/json", false));
+    assert.equal(result.status, 401);
+    const body = await result.json();
+    assert.equal(body.code, "UNAUTHENTICATED");
+    assert.equal(body.requestId, result.headers.get("x-request-id"));
+    assert.equal(result.headers.get("cache-control"), "no-store");
+  }
+  assert.equal(calls.length, 0);
   for (const value of ["", "Basic secret", "Bearer a b", "Bearer "])
     await assert.rejects(
       authenticate(
@@ -29,65 +175,205 @@ test("malformed bearer headers fail before configuration or database access", as
       (e: unknown) => e instanceof HttpError && e.status === 401,
     );
 });
-test("HTTP authentication and rate limits run before provider work", async () => {
-  let calls = 0;
-  const unauth = createEndpoints({
-    authenticate: async () => {
-      throw new HttpError(401, "Sign in", "UNAUTHENTICATED");
-    },
-    interpret: async () => {
-      calls++;
-      throw Error();
-    },
-  });
-  const result = await unauth.interpret(request(JSON.stringify(input)));
-  assert.equal(result.status, 401);
-  assert.equal(calls, 0);
-  const body = await result.json();
-  assert.equal(body.requestId, result.headers.get("x-request-id"));
-  assert.equal(body.code, "UNAUTHENTICATED");
-  const limited = createEndpoints({
-    authenticate: async () => session,
-    limited: async () => {
-      throw new HttpError(429, "Slow down", "RATE_LIMITED");
-    },
-    interpret: async () => {
-      calls++;
-      throw Error();
-    },
-  });
-  assert.equal(
-    (await limited.interpret(request(JSON.stringify(input)))).status,
-    429,
+test("all protected routes rate limit before reading input or changing data", async (t) => {
+  const calls = serviceMock(t, (c) =>
+    c.url.pathname.endsWith("/consume_rate") ? Response.json(false) : undefined,
   );
-  assert.equal(calls, 0);
+  for (const route of [
+    interpret,
+    prepare,
+    apply,
+    transcribe,
+    accept,
+    deleteAccount,
+  ]) {
+    const result = await route(request("{}"));
+    assert.equal(result.status, 429);
+    assert.equal(result.headers.get("retry-after"), "3600");
+  }
+  assert.ok(
+    calls.every(
+      (c) =>
+        c.url.pathname === "/auth/v1/user" ||
+        c.url.pathname.endsWith("/consume_rate"),
+    ),
+  );
+  const rates = calls
+    .filter((c) => c.url.pathname.endsWith("/consume_rate"))
+    .map((c) => c.body as { p_bucket: string; p_max: number });
+  assert.equal(rates.find((r) => r.p_bucket === "ai/transcribe")?.p_max, 30);
+  assert.ok(
+    rates
+      .filter((r) => r.p_bucket !== "ai/transcribe")
+      .every((r) => r.p_max === 60),
+  );
 });
-test("route boundaries validate JSON and preserve a stable success contract", async () => {
-  let calls = 0;
-  const endpoints = createEndpoints({
-    authenticate: async () => session,
-    limited: async () => {},
-    interpret: async () => {
-      calls++;
-      return {
-        summary: "Clarify",
-        question: "When?",
-        actions: [],
-        reviewId: crypto.randomUUID(),
-      };
-    },
-  });
-  assert.equal((await endpoints.interpret(request("{"))).status, 400);
-  assert.equal(
-    (await endpoints.interpret(request("{}", "text/plain"))).status,
-    415,
-  );
-  assert.equal((await endpoints.interpret(request("{}"))).status, 400);
-  const result = await endpoints.interpret(request(JSON.stringify(input)));
+test("interpret route validates input, retrieves records and creates a review", async (t) => {
+  const calls = serviceMock(t);
+  assert.equal((await interpret(request("{"))).status, 400);
+  assert.equal((await interpret(request("{}", "text/plain"))).status, 415);
+  assert.equal((await interpret(request("{}"))).status, 400);
+  assert.ok(!calls.some((c) => c.url.pathname === "/v1/responses"));
+  const result = await interpret(request(JSON.stringify(input)));
   assert.equal(result.status, 200);
-  assert.equal(calls, 1);
-  assert.ok((await result.json()).reviewId);
+  assert.equal((await result.json()).reviewId, reviewId);
+  assert.equal(
+    calls.filter((c) => c.url.pathname === "/v1/responses").length,
+    1,
+  );
+  assert.equal(
+    calls.filter(
+      (c) => c.url.pathname === "/rest/v1/ai_reviews" && c.method === "POST",
+    ).length,
+    1,
+  );
   assert.equal((await unknownRoute()).status, 404);
+  assert.deepEqual(await (await health()).json(), {
+    service: "pox-api",
+    status: "ok",
+  });
+});
+test("prepare route preserves reviewed actions and retries without recreating mutations", async (t) => {
+  let replay = false;
+  const calls = serviceMock(t, (c) =>
+    c.url.pathname === "/rest/v1/ai_proposals" && replay
+      ? Response.json({ id: proposalId })
+      : undefined,
+  );
+  const value = preparation();
+  let result = await prepare(request(JSON.stringify(value)));
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { id: proposalId });
+  let rpc = calls.find((c) => c.url.pathname.endsWith("/prepare_proposal"))!
+    .body as { p_actions: unknown[]; p_request: string };
+  assert.equal(rpc.p_actions.length, 1);
+  assert.equal(rpc.p_request, value.requestId);
+  replay = true;
+  result = await prepare(request(JSON.stringify(value)));
+  assert.equal(result.status, 200);
+  rpc = calls
+    .filter((c) => c.url.pathname.endsWith("/prepare_proposal"))
+    .at(-1)!.body as typeof rpc;
+  assert.deepEqual(rpc.p_actions, []);
+});
+test("prepare refuses expired reviews and invalid group assignments before mutation", async (t) => {
+  let expired = true;
+  const calls = serviceMock(t, (c) => {
+    if (c.url.pathname === "/rest/v1/ai_reviews")
+      return Response.json({
+        sources: {},
+        expires_at: expired ? "2000-01-01T00:00:00Z" : "2099-01-01T00:00:00Z",
+      });
+    if (c.url.pathname === "/rest/v1/members")
+      return Response.json([{ user_id: userId, role: "viewer" }]);
+  });
+  const value = preparation();
+  assert.equal((await prepare(request(JSON.stringify(value)))).status, 410);
+  expired = false;
+  const shared = {
+    ...value,
+    actions: value.actions.map((a) => ({ ...a, spaceId })),
+  };
+  assert.equal((await prepare(request(JSON.stringify(shared)))).status, 403);
+  assert.ok(!calls.some((c) => c.url.pathname.endsWith("/prepare_proposal")));
+});
+test("apply and invitation routes validate identifiers and preserve RPC errors", async (t) => {
+  let conflict = false;
+  const calls = serviceMock(t, (c) =>
+    conflict && c.url.pathname.endsWith("/apply_proposal")
+      ? Response.json({ message: "CONFLICT", code: "P0001" }, { status: 400 })
+      : undefined,
+  );
+  for (const route of [apply, accept])
+    assert.equal((await route(request("{}"))).status, 400);
+  assert.ok(
+    !calls.some((c) => /apply_proposal|accept_invite/.test(c.url.pathname)),
+  );
+  assert.deepEqual(
+    await (await apply(request(JSON.stringify({ id: proposalId })))).json(),
+    { records: [] },
+  );
+  assert.deepEqual(
+    await (
+      await accept(request(JSON.stringify({ token: crypto.randomUUID() })))
+    ).json(),
+    { spaceId },
+  );
+  conflict = true;
+  assert.equal(
+    (await apply(request(JSON.stringify({ id: proposalId })))).status,
+    409,
+  );
+});
+test("account deletion validates confirmation, prepares deletion, and reports retry state", async (t) => {
+  let fail = false;
+  const calls = serviceMock(t, (c) =>
+    fail && c.url.pathname.startsWith("/auth/v1/admin/users/")
+      ? Response.json({ message: "temporary failure" }, { status: 500 })
+      : undefined,
+  );
+  assert.equal(
+    (await deleteAccount(request(JSON.stringify({ confirm: "no" })))).status,
+    400,
+  );
+  assert.ok(
+    !calls.some((c) => c.url.pathname.endsWith("/prepare_account_deletion")),
+  );
+  assert.deepEqual(
+    await (
+      await deleteAccount(request(JSON.stringify({ confirm: "DELETE" })))
+    ).json(),
+    { deleted: true },
+  );
+  const mutations = calls
+    .filter(
+      (c) => c.method !== "GET" && !c.url.pathname.endsWith("/consume_rate"),
+    )
+    .map((c) => c.url.pathname);
+  assert.deepEqual(mutations, [
+    "/rest/v1/rpc/prepare_account_deletion",
+    "/rest/v1/rpc/cleanup_account",
+    "/auth/v1/admin/users/" + userId,
+  ]);
+  fail = true;
+  const result = await deleteAccount(
+    request(JSON.stringify({ confirm: "DELETE" })),
+  );
+  assert.equal(result.status, 503);
+  assert.equal((await result.json()).code, "DELETION_PENDING");
+});
+test("transcription route validates audio and returns provider text", async (t) => {
+  const calls = serviceMock(t);
+  assert.equal((await transcribe(request("{}"))).status, 415);
+  assert.ok(!calls.some((c) => c.url.pathname === "/v1/audio/transcriptions"));
+  const form = new FormData();
+  form.append(
+    "audio",
+    new File([new Uint8Array(10)], "clip.m4a", { type: "audio/mp4" }),
+  );
+  const result = await transcribe(
+    new Request("http://localhost", {
+      method: "POST",
+      headers: { Authorization: "Bearer test-token" },
+      body: form,
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { text: "Buy milk tomorrow" });
+});
+test("provider failures return a safe response without persisting a review", async (t) => {
+  const calls = serviceMock(t, (c) =>
+    c.url.pathname === "/v1/responses"
+      ? Response.json(
+          { error: { message: "secret-provider-key" } },
+          { status: 500 },
+        )
+      : undefined,
+  );
+  const result = await interpret(request(JSON.stringify(input)));
+  assert.equal(result.status, 502);
+  assert.ok(!(await result.text()).includes("secret-provider-key"));
+  assert.ok(!calls.some((c) => c.url.pathname === "/rest/v1/ai_reviews"));
 });
 test("streamed JSON is bounded even without Content-Length", async () => {
   let cancelled = false;
@@ -140,16 +426,4 @@ test("audio rejects empty, unsupported and oversized recordings before transcrip
     ).size,
     10,
   );
-});
-test("provider failure returns a safe error and does not disclose exception contents", async () => {
-  const endpoints = createEndpoints({
-    authenticate: async () => session,
-    limited: async () => {},
-    interpret: async () => {
-      throw Error("secret-provider-key");
-    },
-  });
-  const result = await endpoints.interpret(request(JSON.stringify(input)));
-  assert.equal(result.status, 500);
-  assert.ok(!(await result.text()).includes("secret-provider-key"));
 });

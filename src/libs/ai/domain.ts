@@ -1,14 +1,13 @@
-import { z } from "zod";
+import type { z } from "zod";
+import { modelProposalSchema } from "../../zod/ai";
 import {
   contentSchema,
-  itemSchema,
-  proposalSchema,
   type PoxRecord,
-  type Proposal,
   type Mutation,
-} from "@pox/contracts";
-import { HttpError } from "./http";
-export function boundedSources(records: PoxRecord[], limit = 80_000) {
+} from "../../zod/records";
+import { proposalSchema, type Proposal } from "../../zod/ai";
+import { HttpError } from "../http";
+export const boundedSources = (records: PoxRecord[], limit = 80_000) => {
   let used = 0;
   return records.filter((record) => {
     const size = Buffer.byteLength(JSON.stringify(record));
@@ -16,32 +15,12 @@ export function boundedSources(records: PoxRecord[], limit = 80_000) {
     used += size;
     return true;
   });
-}
+};
 
-// JSON Schema cannot encode custom domain refinements. Validate those after parsing.
-export const modelProposalSchema = proposalSchema.extend({
-  actions: z
-    .array(
-      z.object({
-        kind: z.enum(["create", "update"]),
-        targetId: z.string().nullable(),
-        recordKind: z.enum(["reminder", "context", "instance"]),
-        spaceId: z.string().nullable(),
-        content: z.object({
-          ...contentSchema.shape,
-          timeZone: z.string(),
-          items: z
-            .array(z.object({ ...itemSchema.shape, id: z.string().nullable() }))
-            .max(100),
-        }),
-      }),
-    )
-    .max(10),
-});
-export function normalizeProposal(
+export const normalizeProposal = (
   raw: z.infer<typeof modelProposalSchema>,
   records: PoxRecord[],
-): Proposal {
+): Proposal => {
   if (raw.question) return proposalSchema.parse({ ...raw, actions: [] });
   return proposalSchema.parse({
     ...raw,
@@ -84,13 +63,14 @@ export function normalizeProposal(
       };
     }),
   });
-}
-export function buildActions(
+};
+
+export const buildActions = (
   proposal: Proposal,
   sources: PoxRecord[],
   current: PoxRecord[],
   userId: string,
-): Mutation[] {
+): Mutation[] => {
   const seen = new Set<string>();
   return proposal.actions.map((a) => {
     const source = sources.find((r) => r.id === a.targetId),
@@ -153,4 +133,4 @@ export function buildActions(
       },
     };
   });
-}
+};

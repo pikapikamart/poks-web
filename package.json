@@ -1,5 +1,5 @@
 {
-  "name": "@pox/backend",
+  "name": "@pox/web",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -17,11 +17,10 @@
     "supabase:dump": "supabase db dump --linked --file supabase/schema.sql",
     "supabase:push": "supabase db push --linked",
     "supabase:push:dry": "supabase db push --linked --dry-run",
-    "supabase:gentypes": "supabase gen types --linked --schema public > ../packages/contracts/src/database.ts",
+    "supabase:gentypes": "supabase gen types --linked --schema public > src/database/types/index.ts",
     "supabase:status": "supabase migration list --linked"
   },
   "dependencies": {
-    "@pox/contracts": "1.0.0",
     "@supabase/supabase-js": "^2.57.0",
     "@trigger.dev/sdk": "^4.0.0",
     "luxon": "^3.7.2",
@@ -40,6 +39,11 @@
     "@typescript-eslint/parser": "^8.70.1",
     "supabase": "2.116.0",
     "tsx": "^4.23.15",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.8"
+  },
+  "overrides": {
+    "ws@^8.0.0": "8.21.3"
   }
 }

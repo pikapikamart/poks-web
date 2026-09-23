@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
-import { blankContent } from "@pox/contracts";
+import { blankContent } from "../src/libs/records";
 const a = "00000000-0000-4000-8000-000000000001",
   b = "00000000-0000-4000-8000-000000000002";
 test("migrations, RLS, conflicts, completion, and invitation lifecycle", async () => {

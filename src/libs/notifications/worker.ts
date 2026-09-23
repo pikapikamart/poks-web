@@ -1,32 +1,27 @@
-import { z } from "zod";
-import { admin } from "./server";
 import {
-  defaultPreferences,
-  preferencesSchema,
-  recordSchema,
-  type PoxRecord,
-} from "@pox/contracts";
-import {
-  afterQuietHours,
-  dueTime,
-  nextOccurrence,
-} from "@pox/contracts/src/time";
-import type { Database } from "@pox/contracts/src/database";
-import {
-  deliverToDevices,
-  receiptOutcome,
-  scheduleFor,
-} from "./notification-domain";
-type Delivery = Database["public"]["Tables"]["deliveries"]["Row"];
-function checked<T>({ data, error }: { data: T; error: unknown }): T {
+  pushTicketResponseSchema,
+  pushReceiptsResponseSchema,
+} from "../../zod/notifications";
+import { createServerClient } from "../../supabase";
+import { defaultPreferences } from "../preferences";
+import { preferencesSchema } from "../../zod/preferences";
+import { recordSchema, type PoxRecord } from "../../zod/records";
+import { afterQuietHours, dueTime, nextOccurrence } from "../time";
+import type {
+  Delivery,
+  DeliveryUpdate,
+} from "../../database/types/notifications";
+import { expoRequest } from "./expo";
+import { deliverToDevices, receiptOutcome, scheduleFor } from "./domain";
+const checked = <T>({ data, error }: { data: T; error: unknown }): T => {
   if (error) throw error;
   return data;
-}
-async function recipients(record: PoxRecord) {
+};
+const recipients = async (record: PoxRecord) => {
   const users = record.space_id
     ? (
         checked(
-          await admin()
+          await createServerClient()
             .from("members")
             .select("user_id")
             .eq("space_id", record.space_id),
@@ -34,7 +29,7 @@ async function recipients(record: PoxRecord) {
       ).map((r) => r.user_id)
     : [record.owner_id];
   const deleting = checked(
-    await admin()
+    await createServerClient()
       .from("account_deletions")
       .select("user_id")
       .in("user_id", users),
@@ -42,30 +37,33 @@ async function recipients(record: PoxRecord) {
   return users.filter(
     (id): id is string => !!id && !deleting?.some((d) => d.user_id === id),
   );
-}
-async function preferences(user: string) {
+};
+
+const preferences = async (user: string) => {
   const row = checked(
-    await admin()
+    await createServerClient()
       .from("profiles")
       .select("preferences")
       .eq("id", user)
       .maybeSingle(),
   );
   return row ? preferencesSchema.parse(row.preferences) : defaultPreferences;
-}
-async function generation(user: string) {
+};
+
+const generation = async (user: string) => {
   return (
     checked(
-      await admin()
+      await createServerClient()
         .from("notification_epochs")
         .select("generation")
         .eq("user_id", user)
         .maybeSingle(),
     )?.generation ?? 0
   );
-}
-export async function expandOutbox() {
-  const db = admin();
+};
+
+export const expandOutbox = async () => {
+  const db = createServerClient();
   const events = checked(
     await db
       .from("outbox")
@@ -154,9 +152,9 @@ export async function expandOutbox() {
       );
     }
   }
-}
-export async function advanceRecurrences() {
-  const db = admin(),
+};
+export const advanceRecurrences = async () => {
+  const db = createServerClient(),
     rows = checked(await db.rpc("due_recurrences"));
   for (const raw of rows ?? []) {
     try {
@@ -183,30 +181,11 @@ export async function advanceRecurrences() {
       );
     }
   }
-}
-const ticketSchema = z.object({
-  status: z.enum(["ok", "error"]),
-  id: z.string().optional(),
-  details: z.object({ error: z.string().optional() }).optional(),
-});
-async function expoRequest(path: string, body: unknown): Promise<unknown> {
-  const response = await fetch(`https://exp.host/--/api/v2/push/${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(process.env.EXPO_ACCESS_TOKEN
-        ? { Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}` }
-        : {}),
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) throw new Error(`Push HTTP ${response.status}`);
-  return response.json();
-}
-async function eligibleRecord(job: Delivery) {
+};
+
+const eligibleRecord = async (job: Delivery) => {
   const raw = checked(
-    await admin()
+    await createServerClient()
       .from("records")
       .select("*")
       .eq("id", job.record_id)
@@ -224,14 +203,12 @@ async function eligibleRecord(job: Delivery) {
   )
     return null;
   return record;
-}
-async function finish(
-  job: Delivery,
-  values: Database["public"]["Tables"]["deliveries"]["Update"],
-) {
+};
+
+const finish = async (job: Delivery, values: DeliveryUpdate) => {
   if (!job.claim_token) return;
   checked(
-    await admin()
+    await createServerClient()
       .from("deliveries")
       .update(values)
       .eq("id", job.id)
@@ -239,9 +216,10 @@ async function finish(
       .eq("status", "sending")
       .gt("lease_until", new Date().toISOString()),
   );
-}
-export async function sendDueNotifications() {
-  const db = admin(),
+};
+
+export const sendDueNotifications = async () => {
+  const db = createServerClient(),
     jobs = checked(await db.rpc("claim_deliveries", { p_limit: 10 }));
   for (const job of jobs ?? []) {
     try {
@@ -339,7 +317,7 @@ export async function sendDueNotifications() {
             .eq("delivery_id", job.id),
         ) ?? [];
       await deliverToDevices(attempts, {
-        async eligible(token) {
+        eligible: async (token) => {
           const lease = checked(
             await db
               .from("deliveries")
@@ -361,7 +339,7 @@ export async function sendDueNotifications() {
           );
           return !!device;
         },
-        async send(token) {
+        send: async (token) => {
           const p = await preferences(job.user_id);
           const value = await expoRequest("send", {
             to: token,
@@ -385,9 +363,9 @@ export async function sendDueNotifications() {
               ? "high"
               : "normal",
           });
-          return z.object({ data: ticketSchema }).parse(value).data;
+          return pushTicketResponseSchema.parse(value).data;
         },
-        async persist(token, result) {
+        persist: async (token, result) => {
           return (
             checked(
               await db.rpc("finish_device_attempt", {
@@ -401,7 +379,7 @@ export async function sendDueNotifications() {
             ) === true
           );
         },
-        async retire(token) {
+        retire: async (token) => {
           checked(
             await db
               .from("devices")
@@ -446,9 +424,10 @@ export async function sendDueNotifications() {
       });
     }
   }
-}
-export async function inspectReceipts() {
-  const db = admin(),
+};
+
+export const inspectReceipts = async () => {
+  const db = createServerClient(),
     rows = checked(
       await db
         .from("device_deliveries")
@@ -460,11 +439,9 @@ export async function inspectReceipts() {
         .limit(100),
     );
   if (!rows?.length) return;
-  const result = z
-    .object({ data: z.record(z.string(), ticketSchema) })
-    .parse(
-      await expoRequest("getReceipts", { ids: rows.map((r) => r.ticket_id) }),
-    );
+  const result = pushReceiptsResponseSchema.parse(
+    await expoRequest("getReceipts", { ids: rows.map((r) => r.ticket_id) }),
+  );
   for (const row of rows) {
     const outcome = receiptOutcome(
       result.data[row.ticket_id!],
@@ -481,4 +458,4 @@ export async function inspectReceipts() {
       }),
     );
   }
-}
+};

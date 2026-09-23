@@ -7,11 +7,11 @@ Implemented the API-only backend corrections against `context.md` and `technical
 - Backend suite: **29 tests**, including real migrated PostgreSQL checks through PGlite, HTTP handlers with injected services, and notification/AI domain regression tests.
 - Shared contracts: **7 tests**, including monthly anchors, leap years, daylight-saving gaps/overlaps, completion, and quiet hours.
 - Mobile: **13 tests** covering persistence, sync, and existing model behavior.
-- Workspace TypeScript checks; backend and mobile lint; backend and mobile formatting checks.
+- Both projects TypeScript checks; backend and mobile lint; backend and mobile formatting checks.
 - Next.js production build with explicit API routes.
 - Production server smoke checks: `GET /api/health` returned 200; an unauthenticated `POST /api/ai/interpret` returned 401. The temporary smoke-test server was stopped afterward.
 - Database type generation from a freshly migrated PostgreSQL catalog.
-- `npm ci --ignore-scripts --dry-run` accepted the workspace lockfile.
+- `npm ci --ignore-scripts --dry-run` accepted the project lockfiles.
 
 ## Not verified against live services
 
@@ -21,9 +21,9 @@ No real Google OAuth, OpenAI requests, Trigger cloud executions, or physical-dev
 
 ## Dependency findings
 
-The dependency audit identified a high-severity advisory in the `ws` 8.17.1 dependency used by Trigger's Engine.IO client. The root override pins the 8.x dependency to 8.21.3, and the installed/locked graph now resolves to that patched package; the subsequent install audit reported no high-severity findings and 14 moderate findings remain in the wider workspace dependency tree.
+The dependency audit identified a high-severity advisory in the `ws` 8.17.1 dependency used by Trigger's Engine.IO client. The project override pins the 8.x dependency to 8.21.3, and the installed/locked graph now resolves to that patched package; the subsequent install audit reported no high-severity findings and 14 moderate findings remain in the dependency trees.
 
-This npm version still reports Engine.IO's original `~8.17.1` range as invalid in `npm ls`, despite the root override and a successful clean-install dry run. Treat the override as an explicit compatibility exception and verify Trigger connectivity in the development environment. No force upgrade or Expo downgrade was applied to suppress audit warnings.
+This npm version still reports Engine.IO's original `~8.17.1` range as invalid in `npm ls`, despite the project override and a successful clean-install dry run. Treat the override as an explicit compatibility exception and verify Trigger connectivity in the development environment. No force upgrade or Expo downgrade was applied to suppress audit warnings.
 
 ## Operational limits
 

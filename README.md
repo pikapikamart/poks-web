@@ -1,26 +1,26 @@
 # Pox API and background jobs
 
-This workspace is the React Native app's API backend. It contains Next.js Route Handlers, Supabase migrations, and Trigger.dev jobs. There is no web UI. Normal record and collaboration operations continue to use the authenticated Supabase SDK and database RPCs directly.
+This project is the React Native app's API backend. It contains Next.js Route Handlers, Supabase migrations, and Trigger.dev jobs. There is no web UI. Normal record and collaboration operations continue to use the authenticated Supabase SDK and database RPCs directly.
 
 ## Setup
 
-Use Node 24+ and npm. Run `npm install` at the repository root. The Supabase CLI is included as a development dependency. Docker is required for schema pull/dump operations.
+Use Node 24+ and npm. Run `npm install` inside `web`. The Supabase CLI is included as a development dependency. Docker is required for schema pull/dump operations.
 
-From `backend`, copy `.env.example` to `.env.local` and set the URL, publishable key, and secret key for your Supabase project. Use the same project URL and publishable key in the mobile environment. Keep the secret key in the backend only.
+From `web`, copy `.env.example` to `.env.local` and set the URL, publishable key, and secret key for your Supabase project. Use the same project URL and publishable key in the mobile environment. Keep the secret key in the backend only.
 
 Configure `OPENAI_API_KEY` for text and voice features. The default models are `gpt-5.6-luna` with low reasoning for text and `gpt-4o-mini-transcribe` for transcription, overridable with the documented environment variables. Low reasoning is applied explicitly when the text model is `gpt-5.6-luna`. API startup and local tests do not require working OpenAI credentials; AI requests do.
 
-From the repository root:
+From `web`:
 
 ```powershell
-npm run dev --workspace @pox/backend
+npm run dev
 ```
 
 Check `http://localhost:3000/api/health`. This endpoint confirms that the API process is alive, not that Supabase, OpenAI, or the worker is configured. Protected endpoints require `Authorization: Bearer <Supabase access token>`.
 
 ## Database commands
 
-Run from `backend`. These match the database commands in `doesmondaywork`.
+Run from `web`. These match the database commands in `doesmondaywork`.
 Authenticate once with `npx supabase login`, then link your database:
 
 ```powershell
@@ -28,20 +28,20 @@ npm run supabase:link -- --project-ref YOUR_PROJECT_REF
 npm run supabase:status
 ```
 
-| Command                                  | Purpose                                                     |
-| ---------------------------------------- | ----------------------------------------------------------- |
-| `supabase:link`                          | Link the Supabase project                                   |
-| `supabase:migration -- descriptive_name` | Create a migration                                          |
-| `supabase:pull`                          | Pull database schema changes into a migration               |
-| `supabase:dump`                          | Dump the schema to `supabase/schema.sql` (ignored by Git)   |
-| `supabase:push:dry`                      | Preview pending migrations                                  |
-| `supabase:push`                          | Apply pending migrations                                    |
-| `supabase:gentypes`                      | Generate `packages/contracts/src/database.ts` for both apps |
-| `supabase:status`                        | Show migration history                                      |
+| Command                                  | Purpose                                                   |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `supabase:link`                          | Link the Supabase project                                 |
+| `supabase:migration -- descriptive_name` | Create a migration                                        |
+| `supabase:pull`                          | Pull database schema changes into a migration             |
+| `supabase:dump`                          | Dump the schema to `supabase/schema.sql` (ignored by Git) |
+| `supabase:push:dry`                      | Preview pending migrations                                |
+| `supabase:push`                          | Apply pending migrations                                  |
+| `supabase:gentypes`                      | Generate `src/database/types/database.ts` for the backend |
+| `supabase:status`                        | Show migration history                                    |
 
 For the initial database setup, run `supabase:push:dry`, then `supabase:push`
 to apply the existing migrations. Run `supabase:gentypes` after schema changes,
-then `npm run typecheck` from the repository root. Commit migrations and shared
+then `npm run typecheck` inside `web`. Commit migrations and shared
 types together. CLI authentication and linking are separate from API environment values.
 
 ## Google authentication and physical phones
@@ -52,7 +52,7 @@ For a physical phone, `localhost` points to the phone. Set `EXPO_PUBLIC_API_URL`
 
 ## Worker setup
 
-Set `TRIGGER_PROJECT_ID` and `TRIGGER_SECRET_KEY` for a development project. Start the Trigger CLI from `backend`:
+Set `TRIGGER_PROJECT_ID` and `TRIGGER_SECRET_KEY` for a development project. Start the Trigger CLI from `web`:
 
 ```powershell
 npx trigger.dev@4 dev --env-file .env.local
@@ -92,10 +92,10 @@ Recurring responsibilities produce independent occurrences without completing ea
 ```powershell
 npm run typecheck
 npm test
-npm run lint --workspace @pox/backend
-npm run format:check --workspace @pox/backend
-npm run build --workspace @pox/backend
-npm run supabase:gentypes --workspace @pox/backend
+npm run lint
+npm run format:check
+npm run build
+npm run supabase:gentypes
 ```
 
 Embedded PostgreSQL tests do not exercise PostgREST, GoTrue, Realtime transport, or Docker networking. Verify authenticated requests against the configured Supabase database.
@@ -103,3 +103,23 @@ Embedded PostgreSQL tests do not exercise PostgREST, GoTrue, Realtime transport,
 Tests cover HTTP boundaries, domain validation, RLS roles, proposal conflicts/replays, invitation removal, account cleanup, delivery leases, per-device retries, and recurrence dates. AI and push providers are mocked; live OAuth, provider quality, push credentials, and physical-device behavior require a separately configured development environment.
 
 Monitor structured events `request_failed`, `outbox_failed`, `delivery_failed`, `recurrence_failed`, and `account_deletion_retry_failed`, along with the Trigger run status. Logs omit tokens and memory contents. Inspect failed deliveries, unconfirmed/failed receipts, outbox failures, and pending account deletions. Outbox expansion and delivery attempts are bounded to five attempts; investigate exhausted rows before resetting them for replay. Run migrations before starting the updated API/worker, then update the mobile client. Do not roll back to the old worker after enabling per-device delivery tracking.
+
+## Independent projects
+
+This folder has its own package manifest, lockfile, dependencies, and commands. There is no parent npm workspace. Validation schemas live in `src/zod`; reusable domain behavior lives in `src/libs`. Keep compatible API changes in both projects and run each project's tests. After generating backend database types, copy `web/src/database/types/database.ts` to `mobile/src/contracts/database.ts` when updating the mobile client. Product requirements are in `context.md` and `technical.md`.
+
+## Source layout
+
+Each `app/api/**/route.ts` owns its HTTP method, authentication, rate limiting, input validation, CRUD workflow, and response handling. There is no endpoint registry or handler factory. Database operations stay in domain files under `src/database`, as required by `AGENTS.md`.
+
+```text
+app/api/                Route handlers and request workflows
+src/database/           Database clients, queries and mutations by domain
+src/database/types/     Generated database types and database-only aliases
+src/libs/               HTTP, configuration, AI and notification helpers
+src/zod/                Backend validation and provider response schemas
+src/zod/                Reusable validation and API schemas
+src/trigger/            Scheduled worker entry points
+```
+
+HTTP tests import the actual route handlers and mock external transport. They cover authentication, rate limits, validation, proposal preparation/replay, mutation errors, transcription, and account deletion recovery. Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` from this folder.

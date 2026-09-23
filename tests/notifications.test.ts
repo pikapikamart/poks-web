@@ -1,16 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  blankContent,
-  defaultPreferences,
-  type PoxRecord,
-} from "@pox/contracts";
+import { blankContent } from "../src/libs/records";
+import { defaultPreferences } from "../src/libs/preferences";
+import { type PoxRecord } from "../src/zod/records";
 import {
   deliverToDevices,
   receiptOutcome,
   scheduleFor,
   type Attempt,
-} from "../src/notification-domain";
+} from "../src/libs/notifications/domain";
 test("accepted devices are persisted before the next send and not resent on partial retries", async () => {
   const attempts: Attempt[] = [
       { token: "one", status: "pending" },
