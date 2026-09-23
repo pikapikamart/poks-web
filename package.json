@@ -9,9 +9,16 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "jobs": "npx trigger.dev@4 dev --env-file .env.local",
-    "db:types": "tsx scripts/generate-database-types.ts",
     "lint": "eslint .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "supabase:link": "supabase link",
+    "supabase:migration": "supabase migration new",
+    "supabase:pull": "supabase db pull --linked",
+    "supabase:dump": "supabase db dump --linked --file supabase/schema.sql",
+    "supabase:push": "supabase db push --linked",
+    "supabase:push:dry": "supabase db push --linked --dry-run",
+    "supabase:gentypes": "supabase gen types --linked --schema public > ../packages/contracts/src/database.ts",
+    "supabase:status": "supabase migration list --linked"
   },
   "dependencies": {
     "@pox/contracts": "1.0.0",
@@ -31,6 +38,7 @@
     "@types/react": "~19.2.2",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
+    "supabase": "2.116.0",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   }

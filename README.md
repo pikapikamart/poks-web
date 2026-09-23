@@ -2,21 +2,13 @@
 
 This workspace is the React Native app's API backend. It contains Next.js Route Handlers, Supabase migrations, and Trigger.dev jobs. There is no web UI. Normal record and collaboration operations continue to use the authenticated Supabase SDK and database RPCs directly.
 
-## Local setup
+## Setup
 
-Use Node 24+, npm, Docker Desktop running Linux containers, and the Supabase CLI. Run `npm install` at the repository root. Development and production must use separate Supabase and Trigger projects.
+Use Node 24+ and npm. Run `npm install` at the repository root. The Supabase CLI is included as a development dependency. Docker is required for schema pull/dump operations.
 
-From `backend`, copy `.env.example` to `.env.local`. Start Docker, then run:
+From `backend`, copy `.env.example` to `.env.local` and set the URL, publishable key, and secret key for your Supabase project. Use the same project URL and publishable key in the mobile environment. Keep the secret key in the backend only.
 
-```powershell
-npx supabase start
-npx supabase db reset
-npx supabase status
-```
-
-`db reset` rebuilds the **local development database** and discards its data. Never use it against a shared environment. Copy the local URL, anon key, and service-role key from Supabase status into the corresponding backend environment variables. Do not paste service-role credentials into mobile configuration.
-
-Configure `OPENAI_API_KEY` for text and voice features. The default models remain `gpt-4.1-mini` and `gpt-4o-mini-transcribe`, overridable with the documented environment variables. API startup and local tests do not require working OpenAI credentials; AI requests do.
+Configure `OPENAI_API_KEY` for text and voice features. The default models are `gpt-5.6-luna` with low reasoning for text and `gpt-4o-mini-transcribe` for transcription, overridable with the documented environment variables. Low reasoning is applied explicitly when the text model is `gpt-5.6-luna`. API startup and local tests do not require working OpenAI credentials; AI requests do.
 
 From the repository root:
 
@@ -26,11 +18,37 @@ npm run dev --workspace @pox/backend
 
 Check `http://localhost:3000/api/health`. This endpoint confirms that the API process is alive, not that Supabase, OpenAI, or the worker is configured. Protected endpoints require `Authorization: Bearer <Supabase access token>`.
 
+## Database commands
+
+Run from `backend`. These match the database commands in `doesmondaywork`.
+Authenticate once with `npx supabase login`, then link your database:
+
+```powershell
+npm run supabase:link -- --project-ref YOUR_PROJECT_REF
+npm run supabase:status
+```
+
+| Command                                  | Purpose                                                     |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `supabase:link`                          | Link the Supabase project                                   |
+| `supabase:migration -- descriptive_name` | Create a migration                                          |
+| `supabase:pull`                          | Pull database schema changes into a migration               |
+| `supabase:dump`                          | Dump the schema to `supabase/schema.sql` (ignored by Git)   |
+| `supabase:push:dry`                      | Preview pending migrations                                  |
+| `supabase:push`                          | Apply pending migrations                                    |
+| `supabase:gentypes`                      | Generate `packages/contracts/src/database.ts` for both apps |
+| `supabase:status`                        | Show migration history                                      |
+
+For the initial database setup, run `supabase:push:dry`, then `supabase:push`
+to apply the existing migrations. Run `supabase:gentypes` after schema changes,
+then `npm run typecheck` from the repository root. Commit migrations and shared
+types together. CLI authentication and linking are separate from API environment values.
+
 ## Google authentication and physical phones
 
-Create a Google OAuth client and configure its credentials in the Supabase Auth environment. Enable the existing Google provider section in `supabase/config.toml` for local development. Register the Supabase Auth callback URL shown by your environment with Google; allow `pox://auth/callback` as an app redirect in Supabase. Restart the local Supabase stack after changing provider configuration. Next.js `.env.local` is not automatically the shell environment used by Supabase CLI: supply the `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` variables to the CLI process too.
+Create a Google OAuth client and configure its credentials in Supabase Auth. Register the Supabase Auth callback URL with Google and allow `pox://auth/callback` as an app redirect in Supabase.
 
-For a physical phone, `localhost` points to the phone. Set `EXPO_PUBLIC_API_URL` to the computer's LAN address on port 3000, or an HTTPS development tunnel. The phone also needs a reachable Supabase URL on port 54321. A Metro tunnel does not expose either backend service. Allow the required development ports on your private network. Use a development build for Google sign-in and notifications. An HTTPS development endpoint avoids platform cleartext-network restrictions.
+For a physical phone, `localhost` points to the phone. Set `EXPO_PUBLIC_API_URL` to the computer's LAN address on port 3000, or an HTTPS development tunnel. Use your hosted Supabase project URL in the mobile configuration. A Metro tunnel does not expose either backend service. Allow the required development ports on your private network. Use a development build for Google sign-in and notifications. An HTTPS development endpoint avoids platform cleartext-network restrictions.
 
 ## Worker setup
 
@@ -77,10 +95,10 @@ npm test
 npm run lint --workspace @pox/backend
 npm run format:check --workspace @pox/backend
 npm run build --workspace @pox/backend
-npm run db:types --workspace @pox/backend
+npm run supabase:gentypes --workspace @pox/backend
 ```
 
-`db:types` generates the shared database types from a fresh migrated PostgreSQL catalog using PGlite, so no cloud secrets are required. It covers the project's tables and RPC signatures; relationship metadata is not generated. For deployment validation, also run the migration reset and authenticated requests against actual local Supabase. Embedded PostgreSQL tests do not exercise PostgREST, GoTrue, Realtime transport, or Docker networking.
+Embedded PostgreSQL tests do not exercise PostgREST, GoTrue, Realtime transport, or Docker networking. Verify authenticated requests against the configured Supabase database.
 
 Tests cover HTTP boundaries, domain validation, RLS roles, proposal conflicts/replays, invitation removal, account cleanup, delivery leases, per-device retries, and recurrence dates. AI and push providers are mocked; live OAuth, provider quality, push credentials, and physical-device behavior require a separately configured development environment.
 

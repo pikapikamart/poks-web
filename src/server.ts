@@ -10,7 +10,7 @@ export function env(name: string) {
 export function admin() {
   return createClient<Database>(
     env("SUPABASE_URL"),
-    env("SUPABASE_SERVICE_ROLE_KEY"),
+    env("SUPABASE_SECRET_KEY"),
     {
       auth: { persistSession: false, autoRefreshToken: false },
     },
@@ -24,7 +24,7 @@ export async function authenticate(request: Request) {
     throw new HttpError(401, "Sign in to continue.", "UNAUTHENTICATED");
   const db = createClient<Database>(
     env("SUPABASE_URL"),
-    env("SUPABASE_ANON_KEY"),
+    env("SUPABASE_PUBLISHABLE_KEY"),
     {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false },

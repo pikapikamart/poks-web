@@ -78,9 +78,13 @@ export async function interpret(
     maxRetries: 0,
   });
   let raw: z.infer<typeof modelProposalSchema>;
+  const model = process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-luna";
   try {
     const response = await client.responses.parse({
-      model: process.env.OPENAI_TEXT_MODEL ?? "gpt-4.1-mini",
+      model,
+      ...(model === "gpt-5.6-luna"
+        ? { reasoning: { effort: "low" as const } }
+        : {}),
       store: false,
       max_output_tokens: 8000,
       input: [
