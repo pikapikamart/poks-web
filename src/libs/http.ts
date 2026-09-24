@@ -4,6 +4,7 @@ export type ApiRequestContext = {
   request: Request;
   requestId: string;
   route: string;
+  stage?: string;
   start: number;
 };
 
@@ -51,15 +52,15 @@ export const createApiRequestContext = (
   start: Date.now(),
 });
 
-export const withApiErrorHandling = <TArguments extends [Request]>(
+export const withApiErrorHandling = (
   route: string,
-  handler: (...args: [...TArguments, ApiRequestContext]) => Promise<Response>,
+  handler: (request: Request, context: ApiRequestContext) => Promise<Response>,
 ) => {
-  return async (...args: TArguments): Promise<Response> => {
-    const context = createApiRequestContext(args[0], route);
+  return async (request: Request): Promise<Response> => {
+    const context = createApiRequestContext(request, route);
 
     try {
-      return await handler(...args, context);
+      return await handler(request, context);
     } catch (error) {
       return failure(error, context);
     }
@@ -168,6 +169,9 @@ export const failure = (error: unknown, context: ApiRequestContext) => {
       pathname: url.pathname,
       status: mapped.status,
       code: mapped.code,
+      stage: context.stage ?? "handler",
+      errorType: error instanceof Error ? error.name : typeof error,
+      errorCode: error instanceof HttpError ? error.code : undefined,
       durationMs: Date.now() - context.start,
     }),
   );

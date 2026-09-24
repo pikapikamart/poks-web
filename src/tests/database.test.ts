@@ -4,8 +4,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { blankContent } from "@/libs/records";
 
-const a = "00000000-0000-4000-8000-000000000001",
-  b = "00000000-0000-4000-8000-000000000002";
+const a = "00000000-0000-4000-8000-000000000001";
+const b = "00000000-0000-4000-8000-000000000002";
 
 test("migrations, RLS, conflicts, completion, and invitation lifecycle", async () => {
   const db = new PGlite();
@@ -23,8 +23,8 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       `set role authenticated;select set_config('request.jwt.claim.sub','${a}',false);`,
     );
 
-    const id = crypto.randomUUID(),
-      operation = crypto.randomUUID();
+    const id = crypto.randomUUID();
+    const operation = crypto.randomUUID();
 
     const content = {
       ...blankContent(),

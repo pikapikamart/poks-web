@@ -13,8 +13,8 @@ import {
 
 const user = crypto.randomUUID();
 test("retrieval budgets preserve whole records rather than truncate authoritative fields", () => {
-  const first = record(),
-    second = record();
+  const first = record();
+  const second = record();
 
   const limit = Buffer.byteLength(JSON.stringify(first));
   assert.deepEqual(boundedSources([first, second], limit), [first]);

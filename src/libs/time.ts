@@ -90,9 +90,9 @@ export const afterQuietHours = (iso: string, prefs: Preferences): string => {
 
   let time = DateTime.fromISO(iso).setZone(prefs.timeZone);
 
-  const h = time.hour,
-    start = prefs.quietStart,
-    end = prefs.quietEnd;
+  const h = time.hour;
+  const start = prefs.quietStart;
+  const end = prefs.quietEnd;
 
   const quiet = start < end ? h >= start && h < end : h >= start || h < end;
 

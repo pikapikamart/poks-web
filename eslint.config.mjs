@@ -9,6 +9,28 @@ const isFunctionVariable = (node) =>
       declaration.init?.type === "FunctionExpression",
   );
 
+const paddedHooks = new Set([
+  "useCallback",
+  "useEffect",
+  "useLayoutEffect",
+  "useMemo",
+]);
+
+const isPaddedHookCall = (node) => {
+  const call =
+    node.type === "VariableDeclaration"
+      ? node.declarations[0]?.init
+      : node.type === "ExpressionStatement"
+        ? node.expression
+        : null;
+
+  return (
+    call?.type === "CallExpression" &&
+    call.callee.type === "Identifier" &&
+    paddedHooks.has(call.callee.name)
+  );
+};
+
 const functionPaddingRule = {
   meta: {
     type: "layout",
@@ -19,6 +41,8 @@ const functionPaddingRule = {
     },
   },
   create: (context) => {
+    const reported = new Set();
+
     const requirePadding = (previous, next) => {
       if (
         !previous ||
@@ -28,6 +52,14 @@ const functionPaddingRule = {
         return;
       }
 
+      const key = next.range?.[0] ?? next.loc.start.line;
+
+      if (reported.has(key)) {
+        return;
+      }
+
+      reported.add(key);
+
       context.report({
         node: next,
         messageId: "missingPadding",
@@ -36,7 +68,11 @@ const functionPaddingRule = {
     };
 
     const verify = (node) => {
-      if (node.type !== "FunctionDeclaration" && !isFunctionVariable(node)) {
+      if (
+        node.type !== "FunctionDeclaration" &&
+        !isFunctionVariable(node) &&
+        !isPaddedHookCall(node)
+      ) {
         return;
       }
 
@@ -65,6 +101,7 @@ const functionPaddingRule = {
     };
 
     return {
+      ExpressionStatement: verify,
       FunctionDeclaration: verify,
       VariableDeclaration: verify,
     };
@@ -93,6 +130,7 @@ export default [
       curly: ["error", "all"],
       indent: ["error", 2, { SwitchCase: 1 }],
       "no-trailing-spaces": "error",
+      "one-var": ["error", "never"],
       "local/function-padding": "error",
       "padding-line-between-statements": [
         "error",

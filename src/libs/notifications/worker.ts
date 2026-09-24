@@ -108,8 +108,8 @@ export const expandOutbox = async () => {
           );
 
           for (const user of await recipients(record)) {
-            const prefs = await preferences(user),
-              epoch = await generation(user);
+            const prefs = await preferences(user);
+            const epoch = await generation(user);
 
             const sent =
               checked(
@@ -175,13 +175,13 @@ export const expandOutbox = async () => {
 };
 
 export const advanceRecurrences = async () => {
-  const db = createServerClient(),
-    rows = checked(await db.rpc("due_recurrences"));
+  const db = createServerClient();
+  const rows = checked(await db.rpc("due_recurrences"));
 
   for (const raw of rows ?? []) {
     try {
-      const record = recordSchema.parse(raw),
-        next = nextOccurrence(record.content, raw.recurrence_anchor);
+      const record = recordSchema.parse(raw);
+      const next = nextOccurrence(record.content, raw.recurrence_anchor);
 
       if (next) {
         const users = await recipients(record);
@@ -249,8 +249,8 @@ const finish = async (job: Delivery, values: DeliveryUpdate) => {
 };
 
 export const sendDueNotifications = async () => {
-  const db = createServerClient(),
-    jobs = checked(await db.rpc("claim_deliveries", { p_limit: 10 }));
+  const db = createServerClient();
+  const jobs = checked(await db.rpc("claim_deliveries", { p_limit: 10 }));
 
   for (const job of jobs ?? []) {
     try {
@@ -261,9 +261,9 @@ export const sendDueNotifications = async () => {
         continue;
       }
 
-      const prefs = await preferences(job.user_id),
-        now = Date.now(),
-        allowed = afterQuietHours(new Date(now).toISOString(), prefs);
+      const prefs = await preferences(job.user_id);
+      const now = Date.now();
+      const allowed = afterQuietHours(new Date(now).toISOString(), prefs);
 
       if (new Date(allowed).getTime() > now + 1000) {
         await finish(job, {
@@ -451,8 +451,8 @@ export const sendDueNotifications = async () => {
             .eq("delivery_id", job.id),
         ) ?? [];
 
-      const pending = results.some((r) => r.status === "pending"),
-        failed = results.some((r) => r.status === "failed");
+      const pending = results.some((r) => r.status === "pending");
+      const failed = results.some((r) => r.status === "failed");
 
       await finish(job, {
         status: pending
@@ -483,17 +483,17 @@ export const sendDueNotifications = async () => {
 };
 
 export const inspectReceipts = async () => {
-  const db = createServerClient(),
-    rows = checked(
-      await db
-        .from("device_deliveries")
-        .select("*")
-        .eq("status", "accepted")
-        .is("receipt_status", null)
-        .lte("accepted_at", new Date(Date.now() - 15 * 60_000).toISOString())
-        .order("accepted_at")
-        .limit(100),
-    );
+  const db = createServerClient();
+  const rows = checked(
+    await db
+      .from("device_deliveries")
+      .select("*")
+      .eq("status", "accepted")
+      .is("receipt_status", null)
+      .lte("accepted_at", new Date(Date.now() - 15 * 60_000).toISOString())
+      .order("accepted_at")
+      .limit(100),
+  );
 
   if (!rows?.length) {
     return;

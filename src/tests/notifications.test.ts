@@ -14,8 +14,8 @@ test("accepted devices are persisted before the next send and not resent on part
   const attempts: Attempt[] = [
     { token: "one", status: "pending" },
     { token: "two", status: "pending" },
-  ],
-    events: string[] = [];
+  ];
+  const events: string[] = [];
 
   let fail = true;
 
@@ -52,8 +52,8 @@ test("accepted devices are persisted before the next send and not resent on part
   assert.deepEqual(events, ["send:two", "persist:two"]);
 });
 test("revoked eligibility cancels and a lost lease stops the batch", async () => {
-  let sent = 0,
-    persisted = 0;
+  let sent = 0;
+  let persisted = 0;
   await deliverToDevices(
     [
       { token: "one", status: "pending" },

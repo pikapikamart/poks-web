@@ -1,8 +1,8 @@
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 
-export const alice = "00000000-0000-4000-8000-000000000001",
-  bob = "00000000-0000-4000-8000-000000000002";
+export const alice = "00000000-0000-4000-8000-000000000001";
+export const bob = "00000000-0000-4000-8000-000000000002";
 
 export const database = async () => {
   const db = new PGlite();

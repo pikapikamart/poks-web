@@ -11,6 +11,7 @@ This is a standalone npm project for the Next.js API. Run commands from `web` an
 - Put database-only types in `src/database/types`. Do not scatter generated row types, insert/update types, or database mapping types through feature folders.
 - Put Zustand stores in `src/store`. Each file must define one independently scoped Zustand store.
 - Put reusable Zod schemas in `src/zod`. Split schemas into files by feature or validation purpose, and import them wherever validation is needed.
+- Put all automated tests and their test-only helpers in `src/tests`. Production folders and the project root must not contain test files.
 - Do not duplicate validation schemas in page, component, database, or store modules. Reuse the appropriate schema from `src/zod`.
 
 ## Current API placement map
@@ -44,6 +45,7 @@ src/trigger/                    Trigger.dev entry points only
 - Put plain reusable helpers in `src/libs`; keep direct request/response schemas in `src/zod`; never put a Zod schema in a database module or route file.
 - Use the `@/` alias for every import that resolves inside `src` (for example, `@/libs/http` and `@/database/records`). Use relative paths only for files outside `src`, such as a neighboring test helper.
 - Keep imports contiguous. External package imports come first, then `@/` imports, followed by one blank line before the first declaration.
+- Declare one variable per `const`, `let`, or `var` statement. Never chain declarations with commas; each variable must have its own complete statement.
 
 ## Pages and components
 
@@ -93,6 +95,7 @@ src/
 - Write named functions as `const` arrow functions. Do not use `function` declarations, except where a framework makes them unavoidable.
 - `npm run format` runs Prettier first, then ESLint autofix. Prettier handles wrapping and spaces; ESLint enforces the required blank lines between declarations and statements.
 - Keep block bodies compact. Put blank lines outside functions, including `const` arrow functions, `if`/`else`, loops, `try`/`catch`, and `switch` blocks to separate them from surrounding code. Keep imports as one contiguous group, followed by one empty line before the first non-import statement; never let an import touch ordinary code. Keep an empty line between exported declarations, after setup or guard groups, and before a final return. Do not compress multiple logical steps onto one line.
+- Keep one blank line above and below `useCallback`, `useMemo`, `useEffect`, and `useLayoutEffect` declarations or calls. The formatter enforces this spacing.
 - Run `npm run format`, `npm run lint`, and `npm run typecheck` before finishing. `npm run format` applies both Prettier formatting and the ESLint statement-spacing rules.
 
 <!-- BEGIN:nextjs-agent-rules -->

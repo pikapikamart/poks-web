@@ -1,21 +1,27 @@
 import test, { after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { authenticate } from "@/supabase";
-import { HttpError, audio, json } from "@/libs/http";
+import {
+  HttpError,
+  audio,
+  json,
+  success,
+  withApiErrorHandling,
+} from "@/libs/http";
 import { blankContent } from "@/libs/records";
-import { POST as interpret } from "../app/api/ai/interpret/route";
-import { POST as prepare } from "../app/api/ai/prepare/route";
-import { POST as apply } from "../app/api/ai/apply/route";
-import { POST as transcribe } from "../app/api/ai/transcribe/route";
-import { POST as accept } from "../app/api/invitations/accept/route";
-import { POST as deleteAccount } from "../app/api/account/delete/route";
-import { POST as unknownRoute } from "../app/api/[...path]/route";
-import { GET as health } from "../app/api/health/route";
+import { POST as interpret } from "../../app/api/ai/interpret/route";
+import { POST as prepare } from "../../app/api/ai/prepare/route";
+import { POST as apply } from "../../app/api/ai/apply/route";
+import { POST as transcribe } from "../../app/api/ai/transcribe/route";
+import { POST as accept } from "../../app/api/invitations/accept/route";
+import { POST as deleteAccount } from "../../app/api/account/delete/route";
+import { POST as unknownRoute } from "../../app/api/[...path]/route";
+import { GET as health } from "../../app/api/health/route";
 
-const userId = crypto.randomUUID(),
-  proposalId = crypto.randomUUID(),
-  reviewId = crypto.randomUUID(),
-  spaceId = crypto.randomUUID();
+const userId = crypto.randomUUID();
+const proposalId = crypto.randomUUID();
+const reviewId = crypto.randomUUID();
+const spaceId = crypto.randomUUID();
 
 const environment = {
   SUPABASE_URL: "https://pox-test.supabase.co",
@@ -56,6 +62,21 @@ const request = (body: string, type = "application/json", authorized = true) =>
     },
     body,
   });
+
+test("API wrapper ignores Next's optional route context", async () => {
+  const handler = withApiErrorHandling("test", async (_request, context) => {
+    context.stage = "workflow";
+
+    return success({ ok: true }, context);
+  });
+  const response = await Reflect.apply(handler, undefined, [
+    request("{}"),
+    { params: Promise.resolve({}) },
+  ]);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+});
 
 const preparation = () => ({
   summary: "Buy milk",

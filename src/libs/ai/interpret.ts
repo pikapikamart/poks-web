@@ -23,12 +23,12 @@ export const interpretThought = async (
   });
 
   let raw: z.infer<typeof modelProposalSchema>;
-  const model = process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-luna";
+  const model = process.env.OPENAI_TEXT_MODEL ?? "gpt-6-luna";
 
   try {
     const response = await client.responses.parse({
       model,
-      ...(model === "gpt-5.6-luna"
+      ...(model === "gpt-6-luna"
         ? { reasoning: { effort: "low" as const } }
         : {}),
       store: false,

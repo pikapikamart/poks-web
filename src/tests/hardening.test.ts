@@ -158,8 +158,8 @@ test("database validation, grants, review concurrency, leases and deletion recov
   ).rows[0].id;
   await asUser(db);
 
-  const request = crypto.randomUUID(),
-    body = { actions: ["one"] };
+  const request = crypto.randomUUID();
+  const body = { actions: ["one"] };
 
   const action = {
     operationId: crypto.randomUUID(),
@@ -203,8 +203,8 @@ test("database validation, grants, review concurrency, leases and deletion recov
   await t.test(
     "proposal application is atomic and replay returns identical records after expiry",
     async () => {
-      const first = record("First"),
-        second = record("Invalid second");
+      const first = record("First");
+      const second = record("Invalid second");
 
       const actions = [first, second].map((rec) => ({
         operationId: crypto.randomUUID(),
@@ -257,7 +257,8 @@ test("database validation, grants, review concurrency, leases and deletion recov
       );
     },
   );
-  let space: string, token: string;
+  let space: string;
+  let token: string;
   await t.test("accepted invitation cannot undo member removal", async () => {
     space = (await db.query<{ id: string }>("select (create_space('Team')).id"))
       .rows[0].id;

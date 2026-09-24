@@ -23,8 +23,8 @@ export const scheduleFor = (
     return [];
   }
 
-  const main = afterQuietHours(due, prefs),
-    jobs = [{ kind: "due", due_at: main }];
+  const main = afterQuietHours(due, prefs);
+  const jobs = [{ kind: "due", due_at: main }];
 
   const used = new Set([Date.parse(main)]);
 
@@ -102,8 +102,8 @@ export const deliverToDevices = async (
       continue;
     }
 
-    let outcome: Outcome,
-      invalid = false;
+    let outcome: Outcome;
+    let invalid = false;
 
     try {
       const ticket = await ports.send(attempt.token);

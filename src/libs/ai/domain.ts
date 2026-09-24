@@ -88,8 +88,8 @@ export const buildActions = (
   const seen = new Set<string>();
 
   return proposal.actions.map((a) => {
-    const source = sources.find((r) => r.id === a.targetId),
-      latest = current.find((r) => r.id === a.targetId);
+    const source = sources.find((r) => r.id === a.targetId);
+    const latest = current.find((r) => r.id === a.targetId);
 
     if (a.kind === "update") {
       if (!source || !latest || latest.deleted) {
@@ -128,8 +128,8 @@ export const buildActions = (
     }
 
     if (a.content.templateId) {
-      const template = sources.find((r) => r.id === a.content.templateId),
-        now = current.find((r) => r.id === a.content.templateId);
+      const template = sources.find((r) => r.id === a.content.templateId);
+      const now = current.find((r) => r.id === a.content.templateId);
 
       if (!template || template.kind !== "context" || !now || now.deleted) {
         throw new HttpError(
