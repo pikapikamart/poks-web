@@ -9,10 +9,9 @@ import {
   withApiErrorHandling,
 } from "@/libs/http";
 import { blankContent } from "@/libs/records";
-import { POST as interpret } from "../../app/api/ai/interpret/route";
+import { POST as processThought } from "../../app/api/ai/process/route";
 import { POST as prepare } from "../../app/api/ai/prepare/route";
 import { POST as apply } from "../../app/api/ai/apply/route";
-import { POST as transcribe } from "../../app/api/ai/transcribe/route";
 import { POST as accept } from "../../app/api/invitations/accept/route";
 import { POST as deleteAccount } from "../../app/api/account/delete/route";
 import { POST as unknownRoute } from "../../app/api/[...path]/route";
@@ -232,14 +231,7 @@ const serviceMock = (
 test("all protected route exports reject unauthenticated requests before accessing services", async (t) => {
   const calls = serviceMock(t);
 
-  for (const route of [
-    interpret,
-    prepare,
-    apply,
-    transcribe,
-    accept,
-    deleteAccount,
-  ]) {
+  for (const route of [processThought, prepare, apply, accept, deleteAccount]) {
     const result = await route(request("{}", "application/json", false));
     assert.equal(result.status, 401);
     const body = await result.json();
@@ -271,14 +263,7 @@ test("all protected routes rate limit before reading input or changing data", as
       : undefined,
   );
 
-  for (const route of [
-    interpret,
-    prepare,
-    apply,
-    transcribe,
-    accept,
-    deleteAccount,
-  ]) {
+  for (const route of [processThought, prepare, apply, accept, deleteAccount]) {
     const result = await route(request("{}"));
     assert.equal(result.status, 429);
     assert.equal(result.headers.get("retry-after"), "3600");
@@ -296,20 +281,15 @@ test("all protected routes rate limit before reading input or changing data", as
     .filter((c) => c.url.pathname.endsWith("/consume_api_rate"))
     .map((c) => c.body as { p_bucket: string; p_limit: number });
 
-  assert.equal(rates.find((r) => r.p_bucket === "ai-transcribe")?.p_limit, 30);
-  assert.ok(
-    rates
-      .filter((r) => r.p_bucket !== "ai-transcribe")
-      .every((r) => r.p_limit === 60),
-  );
+  assert.ok(rates.every((rate) => rate.p_limit === 60));
 });
-test("interpret route validates input, retrieves records and creates a review", async (t) => {
+test("process route validates text, retrieves records and creates a review", async (t) => {
   const calls = serviceMock(t);
-  assert.equal((await interpret(request("{"))).status, 400);
-  assert.equal((await interpret(request("{}", "text/plain"))).status, 415);
-  assert.equal((await interpret(request("{}"))).status, 400);
+  assert.equal((await processThought(request("{"))).status, 400);
+  assert.equal((await processThought(request("{}", "text/plain"))).status, 415);
+  assert.equal((await processThought(request("{}"))).status, 400);
   assert.ok(!calls.some((c) => c.url.pathname === "/v1/responses"));
-  const result = await interpret(request(JSON.stringify(input)));
+  const result = await processThought(request(JSON.stringify(input)));
   assert.equal(result.status, 200);
   assert.equal((await result.json()).reviewId, reviewId);
   assert.equal(
@@ -460,9 +440,8 @@ test("account deletion validates confirmation, prepares deletion, and reports re
   assert.equal(result.status, 503);
   assert.equal((await result.json()).code, "DELETION_PENDING");
 });
-test("transcription route validates audio and returns provider text", async (t) => {
+test("process route transcribes audio and returns an interpreted proposal", async (t) => {
   const calls = serviceMock(t);
-  assert.equal((await transcribe(request("{}"))).status, 415);
   assert.ok(!calls.some((c) => c.url.pathname === "/v1/audio/transcriptions"));
   const form = new FormData();
   form.append(
@@ -470,16 +449,26 @@ test("transcription route validates audio and returns provider text", async (t) 
     new File([new Uint8Array(10)], "clip.m4a", { type: "audio/mp4" }),
   );
 
-  const result = await transcribe(
-    new Request("http://localhost", {
-      method: "POST",
-      headers: { Authorization: "Bearer test-token" },
-      body: form,
-    }),
+  const result = await processThought(
+    new Request(
+      `http://localhost?timeZone=${encodeURIComponent(input.timeZone)}&referenceTime=${encodeURIComponent(input.referenceTime)}`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer test-token" },
+        body: form,
+      },
+    ),
   );
 
   assert.equal(result.status, 200);
-  assert.deepEqual(await result.json(), { text: "Buy milk tomorrow" });
+  const body = await result.json();
+  assert.equal(body.text, "Buy milk tomorrow");
+  assert.equal(body.reviewId, reviewId);
+  assert.equal(body.question, "When?");
+  assert.equal(
+    calls.filter((call) => call.url.pathname === "/v1/responses").length,
+    1,
+  );
 });
 test("provider failures return a safe response without persisting a review", async (t) => {
   const calls = serviceMock(t, (c) =>
@@ -491,7 +480,7 @@ test("provider failures return a safe response without persisting a review", asy
       : undefined,
   );
 
-  const result = await interpret(request(JSON.stringify(input)));
+  const result = await processThought(request(JSON.stringify(input)));
   assert.equal(result.status, 502);
   assert.ok(!(await result.text()).includes("secret-provider-key"));
   assert.ok(!calls.some((c) => c.url.pathname === "/rest/v1/ai_reviews"));

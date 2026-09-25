@@ -64,14 +64,13 @@ Set `EXPO_ACCESS_TOKEN` when enhanced push security is enabled in Expo. Mobile E
 
 ## API contracts
 
-| Endpoint                       | Request                                                 | Response                                                         |
-| ------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------- |
-| `POST /api/ai/interpret`       | Text, time zone, reference time, optional clarification | Proposal plus `reviewId`                                         |
-| `POST /api/ai/prepare`         | Reviewed proposal, `reviewId`, stable `requestId`       | `{ id }`                                                         |
-| `POST /api/ai/apply`           | `{ id }`                                                | `{ records }`                                                    |
-| `POST /api/ai/transcribe`      | Multipart `audio` file, nonempty and at most 10 MB      | `{ text }`                                                       |
-| `POST /api/invitations/accept` | `{ token }`                                             | `{ spaceId }`                                                    |
-| `POST /api/account/delete`     | `{ confirm: "DELETE" }`                                 | `{ deleted: true }`, or `DELETION_PENDING` while cleanup retries |
+| Endpoint                       | Request                                                        | Response                                                         |
+| ------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `POST /api/ai/process`         | JSON text or multipart audio with time zone and reference time | Transcript, proposal, and `reviewId`                             |
+| `POST /api/ai/prepare`         | Reviewed proposal, `reviewId`, stable `requestId`              | `{ id }`                                                         |
+| `POST /api/ai/apply`           | `{ id }`                                                       | `{ records }`                                                    |
+| `POST /api/invitations/accept` | `{ token }`                                                    | `{ spaceId }`                                                    |
+| `POST /api/account/delete`     | `{ confirm: "DELETE" }`                                        | `{ deleted: true }`, or `DELETION_PENDING` while cleanup retries |
 
 Errors have `{ error, code, requestId }` and an `X-Request-Id` header. Every API response is `no-store`, varies by authorization, and prevents content-type sniffing. JSON bodies are limited to 100 KB; multipart audio is limited to 10 MB and requires an accepted audio MIME type. Rate limits are atomic, per authenticated user and endpoint, with `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, and `Retry-After` headers: 60 per hour for mutations and AI text requests, and 30 per hour for transcription. Provider calls have bounded timeouts and no implicit retries; the user retains their input when retrying.
 

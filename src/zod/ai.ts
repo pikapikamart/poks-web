@@ -20,6 +20,9 @@ export const proposalSchema = z.object({
 export type Proposal = z.infer<typeof proposalSchema>;
 export const reviewedProposalSchema = proposalSchema.extend({ reviewId: uuid });
 export type ReviewedProposal = z.infer<typeof reviewedProposalSchema>;
+export const processedThoughtSchema = reviewedProposalSchema.extend({
+  text: z.string(),
+});
 export const prepareProposalSchema = reviewedProposalSchema.extend({
   requestId: uuid,
 });

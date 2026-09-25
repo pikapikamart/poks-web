@@ -7,16 +7,12 @@ export const apiRateLimitPolicies = {
     limit: 60,
     windowSeconds: 60 * 60,
   },
-  "ai-interpret": {
+  "ai-process": {
     limit: 60,
     windowSeconds: 60 * 60,
   },
   "ai-prepare": {
     limit: 60,
-    windowSeconds: 60 * 60,
-  },
-  "ai-transcribe": {
-    limit: 30,
     windowSeconds: 60 * 60,
   },
   "invitation-accept": {

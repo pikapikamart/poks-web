@@ -58,7 +58,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
   await t.test(
     "rate limits atomically report the remaining requests and reset time",
     async () => {
-      const args = [`user:${alice}`, "ai-interpret", 2, 60];
+      const args = [`user:${alice}`, "ai-process", 2, 60];
       const first = await db.query<{
         allowed: boolean;
         remaining: number;

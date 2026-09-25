@@ -9,7 +9,7 @@ Implemented the API-only backend corrections against `context.md` and `technical
 - Mobile: **13 tests** covering persistence, sync, and existing model behavior.
 - Both projects TypeScript checks; backend and mobile lint; backend and mobile formatting checks.
 - Next.js production build with explicit API routes.
-- Production server smoke checks: `GET /api/health` returned 200; an unauthenticated `POST /api/ai/interpret` returned 401. The temporary smoke-test server was stopped afterward.
+- Production server smoke checks: `GET /api/health` returned 200; an unauthenticated AI request returned 401. The temporary smoke-test server was stopped afterward.
 - Database type generation from a freshly migrated PostgreSQL catalog.
 - `npm ci --ignore-scripts --dry-run` accepted the project lockfiles.
 
