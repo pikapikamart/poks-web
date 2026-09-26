@@ -154,9 +154,12 @@ const serviceMock = (
       }
 
       if (
-        ["/rest/v1/records", "/rest/v1/spaces", "/rest/v1/profiles"].includes(
-          path,
-        )
+        [
+          "/rest/v1/reminders",
+          "/rest/v1/contexts",
+          "/rest/v1/spaces",
+          "/rest/v1/profiles",
+        ].includes(path)
       ) {
         return Response.json([]);
       }
@@ -347,7 +350,7 @@ test("prepare refuses expired reviews and invalid group assignments before mutat
       });
     }
 
-    if (c.url.pathname === "/rest/v1/members") {
+    if (c.url.pathname === "/rest/v1/space_members") {
       return Response.json([{ user_id: userId, role: "viewer" }]);
     }
   });

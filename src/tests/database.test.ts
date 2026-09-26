@@ -23,6 +23,49 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       `set role authenticated;select set_config('request.jwt.claim.sub','${a}',false);`,
     );
 
+    const physicalTables = await db.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema='public' and table_type='BASE TABLE'",
+    );
+    const tableNames = new Set(
+      physicalTables.rows.map(({ table_name }) => table_name),
+    );
+
+    assert.equal(tableNames.has("records"), false);
+    assert.equal(tableNames.has("members"), false);
+    assert.equal(tableNames.has("contexts"), true);
+    assert.equal(tableNames.has("reminders"), true);
+    assert.equal(tableNames.has("context_reminders"), true);
+    assert.equal(tableNames.has("space_reminders"), true);
+    assert.equal(tableNames.has("space_members"), true);
+
+    const contextId = crypto.randomUUID();
+    const contextContent = {
+      ...blankContent(),
+      title: "Travel checklist",
+      items: [
+        {
+          id: crypto.randomUUID(),
+          title: "Passport",
+          required: true,
+          completed: false,
+          assignee: null,
+          instructions: "",
+        },
+      ],
+    };
+
+    await db.query("select save_record($1,$2,0)", [
+      crypto.randomUUID(),
+      JSON.stringify({
+        id: contextId,
+        owner_id: a,
+        space_id: null,
+        kind: "context",
+        content: contextContent,
+        deleted: false,
+      }),
+    ]);
+
     const id = crypto.randomUUID();
     const operation = crypto.randomUUID();
 
@@ -40,6 +83,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
         },
       ],
       completed: true,
+      templateId: contextId,
     };
 
     const record = {
@@ -61,6 +105,15 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
 
     const first = await save();
     assert.equal(first.rows[0].result.content.completed, false);
+    assert.deepEqual(
+      (
+        await db.query<{ context_id: string; reminder_id: string }>(
+          "select context_id,reminder_id from context_reminders where reminder_id=$1",
+          [id],
+        )
+      ).rows,
+      [{ context_id: contextId, reminder_id: id }],
+    );
     assert.equal((await save()).rows[0].result.version, 1);
     await assert.rejects(
       db.query("select save_record($1,$2,0)", [
@@ -70,7 +123,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       /CONFLICT/,
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
-    assert.equal((await db.query("select * from records")).rows.length, 0);
+    assert.equal((await db.query("select * from reminders")).rows.length, 0);
     await assert.rejects(
       db.query("select save_record($1,$2,1)", [
         crypto.randomUUID(),
@@ -94,9 +147,18 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       crypto.randomUUID(),
       JSON.stringify({ ...record, space_id: space }),
     ]);
+    assert.deepEqual(
+      (
+        await db.query<{ space_id: string; reminder_id: string }>(
+          "select space_id,reminder_id from space_reminders where reminder_id=$1",
+          [id],
+        )
+      ).rows,
+      [{ space_id: space, reminder_id: id }],
+    );
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
     await db.query("select accept_invite($1)", [token]);
-    assert.equal((await db.query("select * from records")).rows.length, 1);
+    assert.equal((await db.query("select * from reminders")).rows.length, 1);
     await assert.rejects(
       db.query("select save_record($1,$2,2)", [
         crypto.randomUUID(),
@@ -121,7 +183,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     assert.equal(
       (
         await db.query<{ content: { completed: boolean } }>(
-          "select content from records",
+          "select content from reminders",
         )
       ).rows[0].content.completed,
       true,
@@ -139,7 +201,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       await db.query<{
         content: typeof content;
         version: number;
-      }>("select content,version from records where id=$1", [id])
+      }>("select content,version from reminders where id=$1", [id])
     ).rows[0];
 
     await assert.rejects(
@@ -173,7 +235,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     await db.query("select manage_member($1,$2,null)", [space, b]);
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
-    assert.equal((await db.query("select * from records")).rows.length, 0);
+    assert.equal((await db.query("select * from reminders")).rows.length, 0);
   } finally {
     await db.close();
   }

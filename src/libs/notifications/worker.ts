@@ -28,7 +28,7 @@ const recipients = async (record: PoxRecord) => {
     ? (
       checked(
         await createServerClient()
-          .from("members")
+          .from("space_members")
           .select("user_id")
           .eq("space_id", record.space_id),
       ) ?? []
@@ -88,7 +88,7 @@ export const expandOutbox = async () => {
     try {
       const raw = checked(
         await db
-          .from("records")
+          .from("reminders")
           .select("*")
           .eq("id", event.record_id)
           .maybeSingle(),
@@ -209,7 +209,7 @@ export const advanceRecurrences = async () => {
 const eligibleRecord = async (job: Delivery) => {
   const raw = checked(
     await createServerClient()
-      .from("records")
+      .from("reminders")
       .select("*")
       .eq("id", job.record_id)
       .maybeSingle(),

@@ -16,8 +16,8 @@ import { recordSchema } from "@/zod/records";
 import { reviewSourcesSchema } from "@/zod/ai";
 import { createProposal, findProposalByRequestId } from "@/database/proposals";
 import { findReviewById } from "@/database/reviews";
-import { findRecordsByIds } from "@/database/records";
-import { listMembersBySpaceId } from "@/database/members";
+import { findRecordsByIds } from "@/libs/record-sources";
+import { listSpaceMembersBySpaceId } from "@/database/space-members";
 import { buildActions } from "@/libs/ai/domain";
 
 export const POST = withApiErrorHandling(
@@ -84,7 +84,7 @@ export const POST = withApiErrorHandling(
       const r = action.record;
 
       if (r.space_id) {
-        const members = await listMembersBySpaceId(db, r.space_id);
+        const members = await listSpaceMembersBySpaceId(db, r.space_id);
 
         if (
           !members.some(

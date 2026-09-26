@@ -5,7 +5,7 @@ import {
   findRecordsBySearchTerms,
   listContextRecords,
   listRecentRecords,
-} from "@/database/records";
+} from "@/libs/record-sources";
 import { listSpaces } from "@/database/spaces";
 import { listProfiles } from "@/database/profiles";
 import {
@@ -27,7 +27,7 @@ import { transcribe } from "@/libs/ai/transcription";
 import { prepareProposalSchema, interpretSchema } from "@/zod/ai";
 import { recordSchema } from "@/zod/records";
 import { createProposal, applyProposalById } from "@/database/proposals";
-import { listMembersBySpaceId } from "@/database/members";
+import { listSpaceMembersBySpaceId } from "@/database/space-members";
 
 export const POST = withApiErrorHandling(
   "ai/process",
@@ -108,7 +108,7 @@ export const POST = withApiErrorHandling(
         const record = action.record;
 
         if (record.space_id) {
-          const members = await listMembersBySpaceId(db, record.space_id);
+          const members = await listSpaceMembersBySpaceId(db, record.space_id);
           const canEdit = members.some(
             (member) =>
               member.user_id === user.id &&

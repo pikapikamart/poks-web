@@ -226,8 +226,8 @@ test("database validation, grants, review concurrency, leases and deletion recov
       await asUser(db);
       await assert.rejects(db.query("select apply_proposal($1)", [bad]));
       assert.equal(
-        (await db.query("select id from records where id=$1", [first.id])).rows
-          .length,
+        (await db.query("select id from reminders where id=$1", [first.id]))
+          .rows.length,
         0,
       );
       await asAdmin(db);
@@ -295,7 +295,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
       ]);
 
       const before = (
-        await db.query("select version from records where id=$1", [r.id])
+        await db.query("select version from reminders where id=$1", [r.id])
       ).rows;
 
       await db.query("update profiles set preferences=$2 where id=$1", [
@@ -303,7 +303,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
         JSON.stringify({ ...defaultPreferences, intensity: "subtle" }),
       ]);
       assert.deepEqual(
-        (await db.query("select version from records where id=$1", [r.id]))
+        (await db.query("select version from reminders where id=$1", [r.id]))
           .rows,
         before,
       );
@@ -461,7 +461,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
           recurrence_anchor: string;
           content: { completed: boolean };
         }>(
-          "select id,recurrence_anchor,content from records where id in ($1,$2)",
+          "select id,recurrence_anchor,content from reminders where id in ($1,$2)",
           [recurring.id, next],
         )
       ).rows;
@@ -499,7 +499,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
         0,
       );
       assert.equal(
-        (await db.query("select id from records where owner_id=$1", [alice]))
+        (await db.query("select id from reminders where owner_id=$1", [alice]))
           .rows.length,
         0,
       );
