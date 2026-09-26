@@ -11,6 +11,7 @@ import { listProfiles } from "@/database/profiles";
 import {
   assertRateLimit,
   audio,
+  HttpError,
   json,
   success,
   withApiErrorHandling,
@@ -20,10 +21,13 @@ import {
   getAuthenticatedRateLimitSubject,
 } from "@/libs/api/rate-limit";
 import { boundedSources } from "@/libs/ai/domain";
+import { buildActions } from "@/libs/ai/domain";
 import { interpretThought } from "@/libs/ai/interpret";
 import { transcribe } from "@/libs/ai/transcription";
-import { interpretSchema } from "@/zod/ai";
+import { prepareProposalSchema, interpretSchema } from "@/zod/ai";
 import { recordSchema } from "@/zod/records";
+import { createProposal, applyProposalById } from "@/database/proposals";
+import { listMembersBySpaceId } from "@/database/members";
 
 export const POST = withApiErrorHandling(
   "ai/process",
@@ -85,12 +89,90 @@ export const POST = withApiErrorHandling(
     const proposal = await interpretThought(input, records, spaces, people);
     context.stage = "review";
     const reviewId = await createReview(user.id, records);
+    const autoCommit =
+      new URL(request.url).searchParams.get("autoCommit") === "1";
+    const requestId = new URL(request.url).searchParams.get("requestId");
+    const reviewed = { ...proposal, reviewId };
+
+    if (
+      autoCommit &&
+      requestId &&
+      !proposal.question &&
+      proposal.actions.length
+    ) {
+      context.stage = "preparation";
+      const prepared = prepareProposalSchema.parse({ ...reviewed, requestId });
+      const actions = buildActions(prepared, records, records, user.id);
+
+      for (const action of actions) {
+        const record = action.record;
+
+        if (record.space_id) {
+          const members = await listMembersBySpaceId(db, record.space_id);
+          const canEdit = members.some(
+            (member) =>
+              member.user_id === user.id &&
+              ["owner", "editor"].includes(member.role),
+          );
+          const validAssignees = record.content.items.every(
+            (item) =>
+              !item.assignee ||
+              members.some((member) => member.user_id === item.assignee),
+          );
+
+          if (!canEdit) {
+            throw new HttpError(
+              403,
+              "You cannot edit this group.",
+              "FORBIDDEN",
+            );
+          }
+
+          if (!validAssignees) {
+            throw new HttpError(
+              400,
+              "Choose a current group member for each assignment.",
+              "INVALID_ASSIGNEE",
+            );
+          }
+        } else if (
+          record.content.items.some(
+            (item) => item.assignee && item.assignee !== user.id,
+          )
+        ) {
+          throw new HttpError(
+            400,
+            "Personal memories can only be assigned to you.",
+            "INVALID_ASSIGNEE",
+          );
+        }
+      }
+
+      const proposalId = await createProposal(db, prepared, actions);
+
+      if (!proposalId) {
+        throw new HttpError(
+          500,
+          "Pox could not save that reminder.",
+          "AI_UNRESOLVED",
+        );
+      }
+
+      const saved = recordSchema
+        .array()
+        .parse(await applyProposalById(db, proposalId));
+
+      context.stage = "response";
+
+      return success(
+        { ...reviewed, text: input.text, records: saved },
+        context,
+        rateLimit,
+      );
+    }
+
     context.stage = "response";
 
-    return success(
-      { ...proposal, reviewId, text: input.text },
-      context,
-      rateLimit,
-    );
+    return success({ ...reviewed, text: input.text }, context, rateLimit);
   },
 );

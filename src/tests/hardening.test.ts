@@ -259,26 +259,33 @@ test("database validation, grants, review concurrency, leases and deletion recov
   );
   let space: string;
   let token: string;
-  await t.test("accepted invitation cannot undo member removal", async () => {
-    space = (await db.query<{ id: string }>("select (create_space('Team')).id"))
-      .rows[0].id;
-    token = (
-      await db.query<{ token: string }>("select (invite($1,'editor')).token", [
-        space,
-      ])
-    ).rows[0].token;
-    await asUser(db, bob);
-    await db.query("select accept_invite($1)", [token]);
-    await db.query("select accept_invite($1)", [token]);
-    await asUser(db);
-    await db.query("select manage_member($1,$2,null)", [space, bob]);
-    await asUser(db, bob);
-    await assert.rejects(
-      db.query("select accept_invite($1)", [token]),
-      /INVITATION_UNAVAILABLE/,
-    );
-    await asUser(db);
-  });
+  await t.test(
+    "a fixed invitation link can add a removed member again",
+    async () => {
+      space = (
+        await db.query<{ id: string }>("select (create_space('Team')).id")
+      ).rows[0].id;
+      token = (
+        await db.query<{ token: string }>(
+          "select (invite($1,'editor')).token",
+          [space],
+        )
+      ).rows[0].token;
+      await asUser(db, bob);
+      await db.query("select accept_invite($1)", [token]);
+      await db.query("select accept_invite($1)", [token]);
+      await asUser(db);
+      await db.query("select manage_member($1,$2,null)", [space, bob]);
+      await asUser(db, bob);
+      await db.query("select accept_invite($1)", [token]);
+      const member = await db.query<{ role: string }>(
+        "select role from members where space_id=$1 and user_id=$2",
+        [space, bob],
+      );
+      assert.equal(member.rows[0].role, "editor");
+      await asUser(db);
+    },
+  );
   await t.test(
     "preference changes reschedule without causing content version conflicts",
     async () => {

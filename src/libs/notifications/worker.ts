@@ -391,8 +391,6 @@ export const sendDueNotifications = async () => {
           return !!device;
         },
         send: async (token) => {
-          const p = await preferences(job.user_id);
-
           const value = await expoRequest("send", {
             to: token,
             title: job.kind === "nudge" ? "A little nudge" : "Pox remembers",
@@ -403,17 +401,9 @@ export const sendDueNotifications = async () => {
               revision: job.revision,
             },
             categoryId: job.kind.startsWith("activity:") ? undefined : "memory",
-            channelId:
-              p.intensity === "subtle" || job.kind === "nudge"
-                ? "gentle"
-                : "reminders",
-            sound:
-              p.intensity === "normal" && job.kind !== "nudge"
-                ? "default"
-                : undefined,
-            priority: ["high", "critical"].includes(record.content.priority)
-              ? "high"
-              : "normal",
+            channelId: job.kind === "nudge" ? "gentle-v3" : "reminders-v3",
+            sound: "default",
+            priority: job.kind === "nudge" ? "normal" : "high",
           });
 
           return pushTicketResponseSchema.parse(value).data;
