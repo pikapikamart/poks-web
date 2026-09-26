@@ -1,6 +1,6 @@
-import type { AppDatabase } from "@/database/types/schema";
+import type { Database } from "@/database/types";
 
 export type Delivery =
-  AppDatabase["public"]["Tables"]["notification_deliveries"]["Row"];
+  Database["public"]["Tables"]["notification_deliveries"]["Row"];
 export type DeliveryUpdate =
-  AppDatabase["public"]["Tables"]["notification_deliveries"]["Update"];
+  Database["public"]["Tables"]["notification_deliveries"]["Update"];
