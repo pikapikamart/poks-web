@@ -63,20 +63,13 @@ export const nextOccurrence = (
 
 export const dueTime = (
   content: Content,
-  preferences: Preferences,
+  _preferences: Preferences,
 ): string | null => {
   if (content.dueAt) {
     return content.dueAt;
   }
 
-  if (!content.dueDate || preferences.defaultDateHour === null) {
-    return null;
-  }
-
-  return DateTime.fromISO(content.dueDate, { zone: content.timeZone })
-    .set({ hour: preferences.defaultDateHour })
-    .toUTC()
-    .toISO();
+  return null;
 };
 
 export const afterQuietHours = (iso: string, prefs: Preferences): string => {

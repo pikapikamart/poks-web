@@ -19,6 +19,8 @@ const buildInterpretInstructions = (timeZone: string) => {
     "Use only supplied target, template, space and person IDs.",
     "New item IDs must be null.",
     "A new reminder may be undated; do not require a date, deadline, person, or elaboration when the thought is otherwise actionable.",
+    "When the thought clearly names a supplied shared space, create the reminder in that space by using its spaceId; otherwise keep the new reminder personal.",
+    "Do not guess between similarly named spaces or invent a space ID.",
     "Consider the supplied Context definitions when creating a reminder.",
     "Create an instance from a Context when the thought clearly calls for that reusable process or explicitly names it; otherwise create a normal reminder.",
     "Ask a concise clarification with no actions only when the requested change depends on choosing between genuinely ambiguous existing memories, Contexts, spaces, or account people, or when it cannot be safely inferred.",

@@ -100,7 +100,7 @@ test("undated thoughts stay quiet and optional items do not block required compl
     true,
   );
 });
-test("quiet hours cross midnight and date-only reminders require opt-in", () => {
+test("quiet hours cross midnight and date-only reminders stay quiet", () => {
   assert.equal(
     afterQuietHours("2026-09-22T23:00:00Z", {
       ...defaultPreferences,

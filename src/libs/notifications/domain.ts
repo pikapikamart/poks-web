@@ -43,22 +43,6 @@ export const scheduleFor = (
     used.add(Date.parse(allowed));
   }
 
-  if (prefs.repeatMinutes > 0) {
-    for (let i = 1; i <= 3; i++) {
-      const repeat = afterQuietHours(
-        new Date(
-          Date.parse(main) + prefs.repeatMinutes * 60_000 * i,
-        ).toISOString(),
-        prefs,
-      );
-
-      if (!used.has(Date.parse(repeat))) {
-        jobs.push({ kind: `repeat-${i}`, due_at: repeat });
-        used.add(Date.parse(repeat));
-      }
-    }
-  }
-
   return jobs;
 };
 
