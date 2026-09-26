@@ -288,18 +288,6 @@ export const sendDueNotifications = async () => {
           ? `Coming up: ${record.content.title}`
           : record.content.title);
 
-      checked(
-        await db.from("inbox").upsert(
-          {
-            user_id: job.user_id,
-            record_id: record.id,
-            body,
-            event_key: job.id,
-          },
-          { onConflict: "event_key", ignoreDuplicates: true },
-        ),
-      );
-
       const devices =
         checked(
           await db.from("devices").select("token").eq("user_id", job.user_id),

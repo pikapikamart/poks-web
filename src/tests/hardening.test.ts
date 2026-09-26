@@ -476,13 +476,8 @@ test("database validation, grants, review concurrency, leases and deletion recov
     },
   );
   await t.test(
-    "account deletion blocks new mutations and cleanup safely retries",
+    "account deletion removes owned spaces, blocks mutations, and safely retries",
     async () => {
-      await assert.rejects(
-        db.query("select prepare_account_deletion()"),
-        /TRANSFER_OWNERSHIP_FIRST/,
-      );
-      await db.query("select delete_space($1)", [space]);
       await db.query("select prepare_account_deletion()");
       await db.query("select prepare_account_deletion()");
       await assert.rejects(save(record()), /DELETING/);
@@ -493,6 +488,16 @@ test("database validation, grants, review concurrency, leases and deletion recov
       await asAdmin(db);
       await db.query("select cleanup_account($1)", [alice]);
       await db.query("select cleanup_account($1)", [alice]);
+      assert.equal(
+        (await db.query("select id from spaces where id=$1", [space])).rows
+          .length,
+        0,
+      );
+      assert.equal(
+        (await db.query("select * from members where space_id=$1", [space]))
+          .rows.length,
+        0,
+      );
       assert.equal(
         (await db.query("select id from records where owner_id=$1", [alice]))
           .rows.length,

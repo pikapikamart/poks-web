@@ -127,6 +127,50 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       true,
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
+    const completionInbox = await db.query<{ body: string }>(
+      "select body from inbox order by created_at",
+    );
+
+    assert.deepEqual(completionInbox.rows, [
+      { body: "Step completed: Passport" },
+    ]);
+    await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
+    const completed = (
+      await db.query<{
+        content: typeof content;
+        version: number;
+      }>("select content,version from records where id=$1", [id])
+    ).rows[0];
+
+    await assert.rejects(
+      db.query("select save_record($1,$2,$3)", [
+        crypto.randomUUID(),
+        JSON.stringify({
+          ...record,
+          space_id: space,
+          content: {
+            ...completed.content,
+            items: completed.content.items.map((item) => ({
+              ...item,
+              completed: false,
+            })),
+          },
+        }),
+        completed.version,
+      ]),
+      /CANNOT_EDIT_COMPLETED/,
+    );
+    await db.query("select save_record($1,$2,$3)", [
+      crypto.randomUUID(),
+      JSON.stringify({
+        ...record,
+        space_id: space,
+        content: completed.content,
+        deleted: true,
+      }),
+      completed.version,
+    ]);
+    await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     await db.query("select manage_member($1,$2,null)", [space, b]);
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
     assert.equal((await db.query("select * from records")).rows.length, 0);
