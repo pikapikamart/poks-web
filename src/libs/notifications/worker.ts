@@ -76,7 +76,7 @@ export const expandOutbox = async () => {
 
   const events = checked(
     await db
-      .from("outbox")
+      .from("reminder_outbox")
       .select("*")
       .eq("processed", false)
       .lte("retry_at", new Date().toISOString())
@@ -90,7 +90,7 @@ export const expandOutbox = async () => {
         await db
           .from("reminders")
           .select("*")
-          .eq("id", event.record_id)
+          .eq("id", event.reminder_id)
           .maybeSingle(),
       );
 
@@ -100,9 +100,9 @@ export const expandOutbox = async () => {
         if (record.version === event.revision) {
           checked(
             await db
-              .from("deliveries")
+              .from("notification_deliveries")
               .update({ status: "cancelled", claim_token: null })
-              .eq("record_id", record.id)
+              .eq("reminder_id", record.id)
               .neq("revision", record.version)
               .in("status", ["pending", "sending"]),
           );
@@ -114,9 +114,9 @@ export const expandOutbox = async () => {
             const sent =
               checked(
                 await db
-                  .from("deliveries")
+                  .from("notification_deliveries")
                   .select("kind")
-                  .eq("record_id", record.id)
+                  .eq("reminder_id", record.id)
                   .eq("revision", record.version)
                   .eq("user_id", user)
                   .eq("status", "sent"),
@@ -128,16 +128,16 @@ export const expandOutbox = async () => {
               }
 
               checked(
-                await db.from("deliveries").upsert(
+                await db.from("notification_deliveries").upsert(
                   {
                     ...job,
-                    record_id: record.id,
+                    reminder_id: record.id,
                     revision: record.version,
                     user_id: user,
                     generation: epoch,
                   },
                   {
-                    onConflict: "record_id,revision,user_id,kind,generation",
+                    onConflict: "reminder_id,revision,user_id,kind,generation",
                     ignoreDuplicates: true,
                   },
                 ),
@@ -149,7 +149,7 @@ export const expandOutbox = async () => {
 
       checked(
         await db
-          .from("outbox")
+          .from("reminder_outbox")
           .update({ processed: true })
           .eq("id", event.id)
           .eq("generation", event.generation),
@@ -158,7 +158,7 @@ export const expandOutbox = async () => {
       console.error(JSON.stringify({ event: "outbox_failed", id: event.id }));
       checked(
         await db
-          .from("outbox")
+          .from("reminder_outbox")
           .update({
             failures: event.failures + 1,
             processed: event.failures >= 4,
@@ -211,7 +211,7 @@ const eligibleRecord = async (job: Delivery) => {
     await createServerClient()
       .from("reminders")
       .select("*")
-      .eq("id", job.record_id)
+      .eq("id", job.reminder_id)
       .maybeSingle(),
   );
 
@@ -239,7 +239,7 @@ const finish = async (job: Delivery, values: DeliveryUpdate) => {
 
   checked(
     await createServerClient()
-      .from("deliveries")
+      .from("notification_deliveries")
       .update(values)
       .eq("id", job.id)
       .eq("claim_token", job.claim_token)
@@ -290,12 +290,15 @@ export const sendDueNotifications = async () => {
 
       const devices =
         checked(
-          await db.from("devices").select("token").eq("user_id", job.user_id),
+          await db
+            .from("notification_devices")
+            .select("token")
+            .eq("user_id", job.user_id),
         ) ?? [];
 
       if (devices.length) {
         checked(
-          await db.from("device_deliveries").upsert(
+          await db.from("notification_device_deliveries").upsert(
             devices.map((d) => ({ delivery_id: job.id, token: d.token })),
             { onConflict: "delivery_id,token", ignoreDuplicates: true },
           ),
@@ -305,9 +308,9 @@ export const sendDueNotifications = async () => {
       const previous =
         checked(
           await db
-            .from("deliveries")
+            .from("notification_deliveries")
             .select("id")
-            .eq("record_id", job.record_id)
+            .eq("reminder_id", job.reminder_id)
             .eq("revision", job.revision)
             .eq("user_id", job.user_id)
             .eq("kind", job.kind)
@@ -318,7 +321,7 @@ export const sendDueNotifications = async () => {
         const accepted =
           checked(
             await db
-              .from("device_deliveries")
+              .from("notification_device_deliveries")
               .select("token")
               .in(
                 "delivery_id",
@@ -330,7 +333,7 @@ export const sendDueNotifications = async () => {
         if (accepted.length) {
           checked(
             await db
-              .from("device_deliveries")
+              .from("notification_device_deliveries")
               .update({ status: "cancelled", last_error: "ALREADY_ACCEPTED" })
               .eq("delivery_id", job.id)
               .eq("status", "pending")
@@ -345,7 +348,7 @@ export const sendDueNotifications = async () => {
       const attempts =
         checked(
           await db
-            .from("device_deliveries")
+            .from("notification_device_deliveries")
             .select("token,status")
             .eq("delivery_id", job.id),
         ) ?? [];
@@ -354,7 +357,7 @@ export const sendDueNotifications = async () => {
         eligible: async (token) => {
           const lease = checked(
             await db
-              .from("deliveries")
+              .from("notification_deliveries")
               .select("id")
               .eq("id", job.id)
               .eq("claim_token", job.claim_token!)
@@ -369,7 +372,7 @@ export const sendDueNotifications = async () => {
 
           const device = checked(
             await db
-              .from("devices")
+              .from("notification_devices")
               .select("token")
               .eq("token", token)
               .eq("user_id", job.user_id)
@@ -413,7 +416,7 @@ export const sendDueNotifications = async () => {
         retire: async (token) => {
           checked(
             await db
-              .from("devices")
+              .from("notification_devices")
               .delete()
               .eq("token", token)
               .eq("user_id", job.user_id),
@@ -424,7 +427,7 @@ export const sendDueNotifications = async () => {
       const results =
         checked(
           await db
-            .from("device_deliveries")
+            .from("notification_device_deliveries")
             .select("status")
             .eq("delivery_id", job.id),
         ) ?? [];
@@ -464,7 +467,7 @@ export const inspectReceipts = async () => {
   const db = createServerClient();
   const rows = checked(
     await db
-      .from("device_deliveries")
+      .from("notification_device_deliveries")
       .select("*")
       .eq("status", "accepted")
       .is("receipt_status", null)

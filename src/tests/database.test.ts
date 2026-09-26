@@ -190,7 +190,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     const completionInbox = await db.query<{ body: string }>(
-      "select body from inbox order by created_at",
+      "select body from notification_inbox order by created_at",
     );
 
     assert.deepEqual(completionInbox.rows, [

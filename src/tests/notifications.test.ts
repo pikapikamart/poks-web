@@ -10,7 +10,7 @@ import {
   type Attempt,
 } from "@/libs/notifications/domain";
 
-test("accepted devices are persisted before the next send and not resent on partial retries", async () => {
+test("accepted notification_devices are persisted before the next send and not resent on partial retries", async () => {
   const attempts: Attempt[] = [
     { token: "one", status: "pending" },
     { token: "two", status: "pending" },

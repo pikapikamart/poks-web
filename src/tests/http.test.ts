@@ -8,18 +8,13 @@ import {
   success,
   withApiErrorHandling,
 } from "@/libs/http";
-import { blankContent } from "@/libs/records";
 import { POST as processThought } from "../../app/api/ai/process/route";
-import { POST as prepare } from "../../app/api/ai/prepare/route";
-import { POST as apply } from "../../app/api/ai/apply/route";
 import { POST as accept } from "../../app/api/invitations/accept/route";
 import { POST as deleteAccount } from "../../app/api/account/delete/route";
 import { POST as unknownRoute } from "../../app/api/[...path]/route";
 import { GET as health } from "../../app/api/health/route";
 
 const userId = crypto.randomUUID();
-const proposalId = crypto.randomUUID();
-const reviewId = crypto.randomUUID();
 const spaceId = crypto.randomUUID();
 
 const environment = {
@@ -47,6 +42,7 @@ after(() => {
 });
 
 const input = {
+  requestId: crypto.randomUUID(),
   text: "Remind me tomorrow",
   timeZone: "UTC",
   referenceTime: "2026-09-23T00:00:00Z",
@@ -75,22 +71,6 @@ test("API wrapper ignores Next's optional route context", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
-});
-
-const preparation = () => ({
-  summary: "Buy milk",
-  question: null,
-  reviewId,
-  requestId: crypto.randomUUID(),
-  actions: [
-    {
-      kind: "create",
-      targetId: null,
-      recordKind: "reminder",
-      spaceId: null,
-      content: { ...blankContent("UTC"), title: "Buy milk" },
-    },
-  ],
 });
 
 type Call = { url: URL; method: string; body: unknown };
@@ -141,15 +121,7 @@ const serviceMock = (
         });
       }
 
-      if (path === "/rest/v1/ai_reviews") {
-        return Response.json(
-          call.method === "POST"
-            ? { id: reviewId }
-            : { sources: {}, expires_at: "2099-01-01T00:00:00Z" },
-        );
-      }
-
-      if (path === "/rest/v1/ai_proposals") {
+      if (path === "/rest/v1/ai_operations") {
         return Response.json(null);
       }
 
@@ -164,11 +136,7 @@ const serviceMock = (
         return Response.json([]);
       }
 
-      if (path === "/rest/v1/rpc/prepare_proposal") {
-        return Response.json(proposalId);
-      }
-
-      if (path === "/rest/v1/rpc/apply_proposal") {
+      if (path === "/rest/v1/rpc/apply_ai_operation") {
         return Response.json([]);
       }
 
@@ -234,7 +202,7 @@ const serviceMock = (
 test("all protected route exports reject unauthenticated requests before accessing services", async (t) => {
   const calls = serviceMock(t);
 
-  for (const route of [processThought, prepare, apply, accept, deleteAccount]) {
+  for (const route of [processThought, accept, deleteAccount]) {
     const result = await route(request("{}", "application/json", false));
     assert.equal(result.status, 401);
     const body = await result.json();
@@ -266,7 +234,7 @@ test("all protected routes rate limit before reading input or changing data", as
       : undefined,
   );
 
-  for (const route of [processThought, prepare, apply, accept, deleteAccount]) {
+  for (const route of [processThought, accept, deleteAccount]) {
     const result = await route(request("{}"));
     assert.equal(result.status, 429);
     assert.equal(result.headers.get("retry-after"), "3600");
@@ -286,7 +254,7 @@ test("all protected routes rate limit before reading input or changing data", as
 
   assert.ok(rates.every((rate) => rate.p_limit === 60));
 });
-test("process route validates text, retrieves records and creates a review", async (t) => {
+test("process route validates text and retrieves relevant records", async (t) => {
   const calls = serviceMock(t);
   assert.equal((await processThought(request("{"))).status, 400);
   assert.equal((await processThought(request("{}", "text/plain"))).status, 415);
@@ -294,17 +262,12 @@ test("process route validates text, retrieves records and creates a review", asy
   assert.ok(!calls.some((c) => c.url.pathname === "/v1/responses"));
   const result = await processThought(request(JSON.stringify(input)));
   assert.equal(result.status, 200);
-  assert.equal((await result.json()).reviewId, reviewId);
+  assert.equal((await result.json()).question, "When?");
   assert.equal(
     calls.filter((c) => c.url.pathname === "/v1/responses").length,
     1,
   );
-  assert.equal(
-    calls.filter(
-      (c) => c.url.pathname === "/rest/v1/ai_reviews" && c.method === "POST",
-    ).length,
-    1,
-  );
+  assert.ok(!calls.some((c) => c.url.pathname.endsWith("apply_ai_operation")));
   assert.equal(
     (await unknownRoute(new Request("http://localhost/api/unknown"))).status,
     404,
@@ -314,89 +277,16 @@ test("process route validates text, retrieves records and creates a review", asy
     status: "ok",
   });
 });
-test("prepare route preserves reviewed actions and retries without recreating mutations", async (t) => {
-  let replay = false;
+test("invitation route validates identifiers", async (t) => {
+  const calls = serviceMock(t);
 
-  const calls = serviceMock(t, (c) =>
-    c.url.pathname === "/rest/v1/ai_proposals" && replay
-      ? Response.json({ id: proposalId })
-      : undefined,
-  );
-
-  const value = preparation();
-  let result = await prepare(request(JSON.stringify(value)));
-  assert.equal(result.status, 200);
-  assert.deepEqual(await result.json(), { id: proposalId });
-  let rpc = calls.find((c) => c.url.pathname.endsWith("/prepare_proposal"))!
-    .body as { p_actions: unknown[]; p_request: string };
-  assert.equal(rpc.p_actions.length, 1);
-  assert.equal(rpc.p_request, value.requestId);
-  replay = true;
-  result = await prepare(request(JSON.stringify(value)));
-  assert.equal(result.status, 200);
-  rpc = calls
-    .filter((c) => c.url.pathname.endsWith("/prepare_proposal"))
-    .at(-1)!.body as typeof rpc;
-  assert.deepEqual(rpc.p_actions, []);
-});
-test("prepare refuses expired reviews and invalid group assignments before mutation", async (t) => {
-  let expired = true;
-
-  const calls = serviceMock(t, (c) => {
-    if (c.url.pathname === "/rest/v1/ai_reviews") {
-      return Response.json({
-        sources: {},
-        expires_at: expired ? "2000-01-01T00:00:00Z" : "2099-01-01T00:00:00Z",
-      });
-    }
-
-    if (c.url.pathname === "/rest/v1/space_members") {
-      return Response.json([{ user_id: userId, role: "viewer" }]);
-    }
-  });
-
-  const value = preparation();
-  assert.equal((await prepare(request(JSON.stringify(value)))).status, 410);
-  expired = false;
-
-  const shared = {
-    ...value,
-    actions: value.actions.map((a) => ({ ...a, spaceId })),
-  };
-
-  assert.equal((await prepare(request(JSON.stringify(shared)))).status, 403);
-  assert.ok(!calls.some((c) => c.url.pathname.endsWith("/prepare_proposal")));
-});
-test("apply and invitation routes validate identifiers and preserve RPC errors", async (t) => {
-  let conflict = false;
-
-  const calls = serviceMock(t, (c) =>
-    conflict && c.url.pathname.endsWith("/apply_proposal")
-      ? Response.json({ message: "CONFLICT", code: "P0001" }, { status: 400 })
-      : undefined,
-  );
-
-  for (const route of [apply, accept]) {
-    assert.equal((await route(request("{}"))).status, 400);
-  }
-
-  assert.ok(
-    !calls.some((c) => /apply_proposal|accept_invite/.test(c.url.pathname)),
-  );
-  assert.deepEqual(
-    await (await apply(request(JSON.stringify({ id: proposalId })))).json(),
-    { records: [] },
-  );
+  assert.equal((await accept(request("{}"))).status, 400);
+  assert.ok(!calls.some((c) => c.url.pathname.endsWith("accept_invite")));
   assert.deepEqual(
     await (
       await accept(request(JSON.stringify({ token: crypto.randomUUID() })))
     ).json(),
     { spaceId },
-  );
-  conflict = true;
-  assert.equal(
-    (await apply(request(JSON.stringify({ id: proposalId })))).status,
-    409,
   );
 });
 test("account deletion validates confirmation, prepares deletion, and reports retry state", async (t) => {
@@ -454,7 +344,7 @@ test("process route transcribes audio and returns an interpreted proposal", asyn
 
   const result = await processThought(
     new Request(
-      `http://localhost?timeZone=${encodeURIComponent(input.timeZone)}&referenceTime=${encodeURIComponent(input.referenceTime)}`,
+      `http://localhost?timeZone=${encodeURIComponent(input.timeZone)}&referenceTime=${encodeURIComponent(input.referenceTime)}&requestId=${input.requestId}`,
       {
         method: "POST",
         headers: { Authorization: "Bearer test-token" },
@@ -466,14 +356,13 @@ test("process route transcribes audio and returns an interpreted proposal", asyn
   assert.equal(result.status, 200);
   const body = await result.json();
   assert.equal(body.text, "Buy milk tomorrow");
-  assert.equal(body.reviewId, reviewId);
   assert.equal(body.question, "When?");
   assert.equal(
     calls.filter((call) => call.url.pathname === "/v1/responses").length,
     1,
   );
 });
-test("provider failures return a safe response without persisting a review", async (t) => {
+test("provider failures return a safe response without applying an operation", async (t) => {
   const calls = serviceMock(t, (c) =>
     c.url.pathname === "/v1/responses"
       ? Response.json(
@@ -486,7 +375,7 @@ test("provider failures return a safe response without persisting a review", asy
   const result = await processThought(request(JSON.stringify(input)));
   assert.equal(result.status, 502);
   assert.ok(!(await result.text()).includes("secret-provider-key"));
-  assert.ok(!calls.some((c) => c.url.pathname === "/rest/v1/ai_reviews"));
+  assert.ok(!calls.some((c) => c.url.pathname.endsWith("apply_ai_operation")));
 });
 test("streamed JSON is bounded even without Content-Length", async () => {
   let cancelled = false;

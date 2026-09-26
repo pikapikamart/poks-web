@@ -114,7 +114,7 @@ test("Context instances copy the user's definition and receive fresh step identi
   assert.equal(item.completed, false);
   assert.notEqual(item.id, template.content.items[0].id);
 });
-test("prepared actions preserve reviewed fields and reject stale source or template versions", () => {
+test("AI actions preserve source fields and reject stale source or template versions", () => {
   const source = record();
 
   const proposal: Proposal = {

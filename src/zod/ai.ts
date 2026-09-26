@@ -18,15 +18,12 @@ export const proposalSchema = z.object({
     .max(10),
 });
 export type Proposal = z.infer<typeof proposalSchema>;
-export const reviewedProposalSchema = proposalSchema.extend({ reviewId: uuid });
-export type ReviewedProposal = z.infer<typeof reviewedProposalSchema>;
-export const processedThoughtSchema = reviewedProposalSchema.extend({
+export const processedThoughtSchema = proposalSchema.extend({
   text: z.string(),
-});
-export const prepareProposalSchema = reviewedProposalSchema.extend({
-  requestId: uuid,
+  records: recordSchema.array().optional(),
 });
 export const interpretSchema = z.object({
+  requestId: uuid,
   text: z.string().trim().min(1).max(4000),
   timeZone: zoneSchema,
   referenceTime: z.string().datetime(),
@@ -53,6 +50,3 @@ export const modelProposalSchema = proposalSchema.extend({
     )
     .max(10),
 });
-
-export const applyProposalSchema = z.object({ id: uuid });
-export const reviewSourcesSchema = z.record(z.string(), recordSchema);

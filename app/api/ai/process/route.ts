@@ -1,6 +1,9 @@
 import { authenticate } from "@/supabase";
 import { consumeRateLimit } from "@/database/rate-limits";
-import { createReview } from "@/database/reviews";
+import {
+  applyAiOperation,
+  findAiOperationByRequestId,
+} from "@/database/ai-operations";
 import {
   findRecordsBySearchTerms,
   listContextRecords,
@@ -24,9 +27,8 @@ import { boundedSources } from "@/libs/ai/domain";
 import { buildActions } from "@/libs/ai/domain";
 import { interpretThought } from "@/libs/ai/interpret";
 import { transcribe } from "@/libs/ai/transcription";
-import { prepareProposalSchema, interpretSchema } from "@/zod/ai";
+import { interpretSchema, proposalSchema } from "@/zod/ai";
 import { recordSchema } from "@/zod/records";
-import { createProposal, applyProposalById } from "@/database/proposals";
 import { listSpaceMembersBySpaceId } from "@/database/space-members";
 
 export const POST = withApiErrorHandling(
@@ -56,10 +58,43 @@ export const POST = withApiErrorHandling(
       const text = await transcribe(file);
       const url = new URL(request.url);
       input = interpretSchema.parse({
+        requestId: url.searchParams.get("requestId"),
         text,
         timeZone: url.searchParams.get("timeZone"),
         referenceTime: url.searchParams.get("referenceTime"),
       });
+    }
+
+    context.stage = "idempotency";
+    const existing = await findAiOperationByRequestId(user.id, input.requestId);
+
+    if (existing) {
+      const originalInput = interpretSchema.parse(existing.request_body);
+
+      if (JSON.stringify(originalInput) !== JSON.stringify(input)) {
+        throw new HttpError(
+          409,
+          "This request ID was already used for another thought.",
+          "IDEMPOTENCY_CONFLICT",
+        );
+      }
+
+      if (existing.status !== "completed" || !existing.result) {
+        throw new HttpError(
+          409,
+          "This thought is still being processed. Try again.",
+          "OPERATION_INCOMPLETE",
+        );
+      }
+
+      const savedProposal = proposalSchema.parse(existing.proposal);
+      const savedRecords = recordSchema.array().parse(existing.result);
+
+      return success(
+        { ...savedProposal, text: input.text, records: savedRecords },
+        context,
+        rateLimit,
+      );
     }
 
     context.stage = "source_lookup";
@@ -87,22 +122,10 @@ export const POST = withApiErrorHandling(
 
     context.stage = "interpretation";
     const proposal = await interpretThought(input, records, spaces, people);
-    context.stage = "review";
-    const reviewId = await createReview(user.id, records);
-    const autoCommit =
-      new URL(request.url).searchParams.get("autoCommit") === "1";
-    const requestId = new URL(request.url).searchParams.get("requestId");
-    const reviewed = { ...proposal, reviewId };
 
-    if (
-      autoCommit &&
-      requestId &&
-      !proposal.question &&
-      proposal.actions.length
-    ) {
-      context.stage = "preparation";
-      const prepared = prepareProposalSchema.parse({ ...reviewed, requestId });
-      const actions = buildActions(prepared, records, records, user.id);
+    if (!proposal.question && proposal.actions.length) {
+      context.stage = "application";
+      const actions = buildActions(proposal, records, records, user.id);
 
       for (const action of actions) {
         const record = action.record;
@@ -148,24 +171,23 @@ export const POST = withApiErrorHandling(
         }
       }
 
-      const proposalId = await createProposal(db, prepared, actions);
-
-      if (!proposalId) {
-        throw new HttpError(
-          500,
-          "Pox could not save that reminder.",
-          "AI_UNRESOLVED",
-        );
-      }
-
       const saved = recordSchema
         .array()
-        .parse(await applyProposalById(db, proposalId));
+        .parse(
+          await applyAiOperation(
+            db,
+            input.requestId,
+            input,
+            proposal,
+            records,
+            actions,
+          ),
+        );
 
       context.stage = "response";
 
       return success(
-        { ...reviewed, text: input.text, records: saved },
+        { ...proposal, text: input.text, records: saved },
         context,
         rateLimit,
       );
@@ -173,6 +195,6 @@ export const POST = withApiErrorHandling(
 
     context.stage = "response";
 
-    return success({ ...reviewed, text: input.text }, context, rateLimit);
+    return success({ ...proposal, text: input.text }, context, rateLimit);
   },
 );

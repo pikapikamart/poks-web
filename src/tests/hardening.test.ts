@@ -4,7 +4,7 @@ import { blankContent } from "@/libs/records";
 import { defaultPreferences } from "@/libs/preferences";
 import { database, asUser, asAdmin, alice, bob } from "./helpers/database";
 
-test("database validation, grants, review concurrency, leases and deletion recovery", async (t) => {
+test("database validation, grants, AI concurrency, leases and deletion recovery", async (t) => {
   const db = await database();
   t.after(() => db.close());
 
@@ -30,7 +30,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
         for (const fn of [
           "save_record_internal(uuid,jsonb,integer)",
           "cleanup_account(uuid)",
-          "check_review_sources(jsonb)",
+          "check_ai_sources(jsonb)",
           "reschedule_user(uuid)",
           "consume_api_rate(text,text,integer,integer)",
           "finish_device_attempt(uuid,uuid,text,text,text,text)",
@@ -148,18 +148,10 @@ test("database validation, grants, review concurrency, leases and deletion recov
       /INVALID_KIND_CHANGE/,
     );
   });
-  let review: string;
-  await asAdmin(db);
-  review = (
-    await db.query<{ id: string }>(
-      "insert into ai_reviews(user_id,sources) values($1,$2) returning id",
-      [alice, JSON.stringify({ [r.id]: { ...r, version: 1 } })],
-    )
-  ).rows[0].id;
-  await asUser(db);
-
   const request = crypto.randomUUID();
-  const body = { actions: ["one"] };
+  const body = { text: "Update the reminder" };
+  const proposal = { summary: "Updated", question: null, actions: [] };
+  const sources = { [r.id]: { ...r, version: 1 } };
 
   const action = {
     operationId: crypto.randomUUID(),
@@ -167,96 +159,51 @@ test("database validation, grants, review concurrency, leases and deletion recov
     record: { ...r, content: { ...r.content, title: "Reviewed change" } },
   };
 
-  const prepare = (req = request, payload = body, actions = [action]) =>
-    db.query<{ id: string }>("select prepare_proposal($1,$2,$3,$4) as id", [
-      review,
-      req,
-      JSON.stringify(payload),
-      JSON.stringify(actions),
-    ]);
+  const applyOperation = (req = request, payload = body, actions = [action]) =>
+    db.query<{ records: unknown }>(
+      "select apply_ai_operation($1,$2,$3,$4,$5) as records",
+      [
+        req,
+        JSON.stringify(payload),
+        JSON.stringify(proposal),
+        JSON.stringify(sources),
+        JSON.stringify(actions),
+      ],
+    );
 
-  const proposal = (await prepare()).rows[0].id;
   await t.test(
-    "preparation retries are stable and body reuse conflicts",
+    "AI operation retries are stable and body reuse conflicts",
     async () => {
-      assert.equal((await prepare()).rows[0].id, proposal);
+      const first = await applyOperation();
+      assert.deepEqual((await applyOperation()).rows, first.rows);
       await assert.rejects(
-        prepare(request, { actions: ["different"] }),
+        applyOperation(request, { text: "Different request" }),
         /IDEMPOTENCY_CONFLICT/,
       );
     },
   );
-  await t.test(
-    "changes during review conflict at preparation and application",
-    async () => {
-      await save(
-        { ...r, content: { ...r.content, title: "Another device" } },
-        1,
-      );
-      await assert.rejects(prepare(crypto.randomUUID()), /CONFLICT/);
-      await assert.rejects(
-        db.query("select apply_proposal($1)", [proposal]),
-        /CONFLICT/,
-      );
-    },
-  );
-  await t.test(
-    "proposal application is atomic and replay returns identical records after expiry",
-    async () => {
-      const first = record("First");
-      const second = record("Invalid second");
+  await t.test("AI operation rejects stale source versions", async () => {
+    await assert.rejects(applyOperation(crypto.randomUUID()), /CONFLICT/);
+  });
+  await t.test("AI operation applies multiple records atomically", async () => {
+    const first = record("First");
+    const second = record("Invalid second");
 
-      const actions = [first, second].map((rec) => ({
-        operationId: crypto.randomUUID(),
-        expectedVersion: 0,
-        record: rec,
-      }));
+    const actions = [first, second].map((rec) => ({
+      operationId: crypto.randomUUID(),
+      expectedVersion: 0,
+      record: rec,
+    }));
 
-      await asAdmin(db);
-      const invalid = JSON.parse(JSON.stringify(actions));
-      invalid[1].record.content.priority = null;
-
-      const bad = (
-        await db.query<{ id: string }>(
-          "insert into ai_proposals(user_id,actions) values($1,$2) returning id",
-          [alice, JSON.stringify(invalid)],
-        )
-      ).rows[0].id;
-
-      await asUser(db);
-      await assert.rejects(db.query("select apply_proposal($1)", [bad]));
-      assert.equal(
-        (await db.query("select id from reminders where id=$1", [first.id]))
-          .rows.length,
-        0,
-      );
-      await asAdmin(db);
-
-      const good = (
-        await db.query<{ id: string }>(
-          "insert into ai_proposals(user_id,actions) values($1,$2) returning id",
-          [alice, JSON.stringify(actions)],
-        )
-      ).rows[0].id;
-
-      await asUser(db);
-
-      const result = await db.query("select apply_proposal($1) as records", [
-        good,
-      ]);
-
-      await asAdmin(db);
-      await db.query(
-        "update ai_proposals set expires_at=now()-interval '1 day' where id=$1",
-        [good],
-      );
-      await asUser(db);
-      assert.deepEqual(
-        (await db.query("select apply_proposal($1) as records", [good])).rows,
-        result.rows,
-      );
-    },
-  );
+    const invalid = JSON.parse(JSON.stringify(actions));
+    invalid[1].record.content.priority = null;
+    await assert.rejects(applyOperation(crypto.randomUUID(), body, invalid));
+    assert.equal(
+      (await db.query("select id from reminders where id=$1", [first.id])).rows
+        .length,
+      0,
+    );
+  });
   let space: string;
   let token: string;
   await t.test(
@@ -279,7 +226,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
       await asUser(db, bob);
       await db.query("select accept_invite($1)", [token]);
       const member = await db.query<{ role: string }>(
-        "select role from members where space_id=$1 and user_id=$2",
+        "select role from space_members where space_id=$1 and user_id=$2",
         [space, bob],
       );
       assert.equal(member.rows[0].role, "editor");
@@ -326,7 +273,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
 
       const id = (
         await db.query<{ id: string }>(
-          "insert into deliveries(record_id,revision,user_id,kind,due_at) values($1,2,$2,'due',now()) returning id",
+          "insert into notification_deliveries(reminder_id,revision,user_id,kind,due_at) values($1,2,$2,'due',now()) returning id",
           [r.id, alice],
         )
       ).rows[0].id;
@@ -338,11 +285,11 @@ test("database validation, grants, review concurrency, leases and deletion recov
       ).rows[0];
 
       await db.query(
-        "insert into device_deliveries(delivery_id,token) values($1,'device')",
+        "insert into notification_device_deliveries(delivery_id,token) values($1,'device')",
         [id],
       );
       await db.query(
-        "update deliveries set lease_until=now()-interval '1 second' where id=$1",
+        "update notification_deliveries set lease_until=now()-interval '1 second' where id=$1",
         [id],
       );
 
@@ -381,12 +328,15 @@ test("database validation, grants, review concurrency, leases and deletion recov
 
       const job = (
         await db.query<{ id: string }>(
-          "select id from deliveries where record_id=$1 and kind='due'",
+          "select id from notification_deliveries where reminder_id=$1 and kind='due'",
           [r.id],
         )
       ).rows[0].id;
 
-      await db.query("update deliveries set status='sent' where id=$1", [job]);
+      await db.query(
+        "update notification_deliveries set status='sent' where id=$1",
+        [job],
+      );
       await db.query(
         "select record_push_receipt($1,'device','ticket','MessageRateExceeded')",
         [job],
@@ -394,7 +344,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
       assert.equal(
         (
           await db.query<{ status: string }>(
-            "select status from device_deliveries where delivery_id=$1",
+            "select status from notification_device_deliveries where delivery_id=$1",
             [job],
           )
         ).rows[0].status,
@@ -403,7 +353,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
       assert.equal(
         (
           await db.query<{ status: string }>(
-            "select status from deliveries where id=$1",
+            "select status from notification_deliveries where id=$1",
             [job],
           )
         ).rows[0].status,
@@ -416,7 +366,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
       assert.equal(
         (
           await db.query<{ status: string }>(
-            "select status from device_deliveries where delivery_id=$1",
+            "select status from notification_device_deliveries where delivery_id=$1",
             [job],
           )
         ).rows[0].status,
@@ -426,7 +376,7 @@ test("database validation, grants, review concurrency, leases and deletion recov
     },
   );
   await t.test(
-    "recurrences create independent instances and preserve the calendar anchor",
+    "reminder_recurrences create independent instances and preserve the calendar anchor",
     async () => {
       const recurring = record("Monthly responsibility");
       recurring.content = {
@@ -494,8 +444,11 @@ test("database validation, grants, review concurrency, leases and deletion recov
         0,
       );
       assert.equal(
-        (await db.query("select * from members where space_id=$1", [space]))
-          .rows.length,
+        (
+          await db.query("select * from space_members where space_id=$1", [
+            space,
+          ])
+        ).rows.length,
         0,
       );
       assert.equal(
