@@ -1,62 +1,189 @@
-# Supabase database
+# Database reference
 
-This document describes the current linked Supabase database after all migrations through `202609270003_consolidate_ai_operations.sql`. The `public` schema contains 20 tables. Supabase owns `auth.users`, which remains the identity source; public tables containing `user_id`, `owner_id`, or `actor_id` reference it.
+Pox uses Supabase Postgres. Supabase Auth owns `auth.users`; the application owns the 20 tables in the `public` schema documented here. User, owner, actor, and assignee IDs ultimately identify authenticated users.
 
-## User and collaboration data
+## Users and account lifecycle
 
-| Table                    | Purpose                                                                                                                                               |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`               | Stores each user's display information, timezone, quiet hours, notification intensity, and default snooze preference. Its ID matches `auth.users.id`. |
-| `spaces`                 | Stores collaboration groups and their owners.                                                                                                         |
-| `space_members`          | Join table between users and Spaces. It stores the member's `owner`, `editor`, or `viewer` role.                                                      |
-| `invitations`            | Stores reusable Space invitation tokens, the role granted, expiry, revocation state, and accepting user.                                              |
-| `collaboration_activity` | Stores collaborative Reminder events, including the actor, Space, Reminder, event type, message, and metadata.                                        |
+### `profiles`
+
+One profile per user. `id` matches `auth.users.id`. `display_name` is the name shown in the app, while `preferences` stores structured settings such as timezone, quiet hours, notification intensity, and default snooze duration.
+
+### `account_deletions`
+
+Tracks an account-deletion workflow and blocks new writes while deletion is underway.
+
+| Column       | Meaning                          |
+| ------------ | -------------------------------- |
+| `user_id`    | User being deleted; primary key. |
+| `created_at` | Time deletion was requested.     |
+| `attempts`   | Cleanup attempt count.           |
+| `last_error` | Most recent cleanup failure.     |
 
 ## Contexts and reminders
 
-| Table                  | Purpose                                                                                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `contexts`             | Stores reusable Context templates with their descriptions, checklist steps, versions, deletion state, and searchable content.                      |
-| `reminders`            | Stores personal and shared reminders, including content, schedule, completion state, recurrence configuration, owner, version, and deletion state. |
-| `context_reminders`    | Join table between Contexts and Reminders created from them. Its unique Reminder key currently permits at most one Context per Reminder.           |
-| `space_reminders`      | Join table between Spaces and shared Reminders. Its unique Reminder key currently permits at most one Space per Reminder.                          |
-| `reminder_recurrences` | Connects a recurring parent Reminder to its next generated Reminder occurrence.                                                                    |
-| `reminder_operations`  | Stores the result of each Reminder write operation so retrying the same operation ID does not write the Reminder twice.                            |
-| `reminder_outbox`      | Transactional queue of Reminder revisions whose notification schedules must be recalculated.                                                       |
+### `contexts`
+
+Stores reusable Context templates. `content` contains the title, notes, instructions, and checklist steps. `owner_id` identifies the owner; `version` supports optimistic concurrency; `deleted` enables soft deletion; `updated_at` records changes; and `search_vector` supports full-text search. `kind`, `space_id`, and `recurrence_anchor` are retained by the normalized record shape.
+
+### `reminders`
+
+Stores all personal, shared, and Context-created Reminders.
+
+| Column              | Meaning                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`                | Reminder UUID.                                                                                                      |
+| `owner_id`          | User who owns the Reminder.                                                                                         |
+| `space_id`          | Space containing it, or `null` for a personal Reminder.                                                             |
+| `kind`              | Ordinary Reminder or Context-created instance.                                                                      |
+| `content`           | Structured title, notes, instructions, schedule, completion, steps, assignments, priority, and recurrence settings. |
+| `recurrence_anchor` | Calendar anchor that prevents recurring dates from drifting.                                                        |
+| `version`           | Optimistic-concurrency version.                                                                                     |
+| `updated_at`        | Last modification time.                                                                                             |
+| `deleted`           | Soft-deletion flag.                                                                                                 |
+| `search_vector`     | Generated full-text search data.                                                                                    |
+
+### `context_reminders`
+
+Join table connecting a Reminder to the Context used to create it. It contains `context_id`, `reminder_id`, and `created_at`. `reminder_id` is unique, so one Reminder can use at most one Context. Deleting either entity removes the join row.
+
+### `reminder_recurrences`
+
+Tracks the next occurrence of a recurring Reminder.
+
+| Column               | Meaning                                          |
+| -------------------- | ------------------------------------------------ |
+| `parent_reminder_id` | Recurring parent Reminder; primary key.          |
+| `next_reminder_id`   | Unique next generated occurrence, if one exists. |
+
+Deleting the parent removes the recurrence row. Deleting the next occurrence clears `next_reminder_id`, allowing another occurrence to be generated.
+
+### `reminder_operations`
+
+Idempotency ledger for ordinary Reminder writes. Its primary key is the `user_id` and client-generated operation `id` pair. `result` stores the completed write result so retrying after a lost response does not mutate the Reminder twice.
+
+### `reminder_outbox`
+
+Transactional queue used to rebuild notification schedules after Reminder changes.
+
+| Column        | Meaning                                                 |
+| ------------- | ------------------------------------------------------- |
+| `id`          | Monotonic queue identifier.                             |
+| `reminder_id` | Reminder that changed.                                  |
+| `revision`    | Reminder version to process; unique with `reminder_id`. |
+| `generation`  | Notification generation for this event.                 |
+| `processed`   | Whether scheduling completed.                           |
+| `failures`    | Failed attempt count.                                   |
+| `retry_at`    | Earliest next attempt.                                  |
+| `last_error`  | Most recent worker error.                               |
+| `created_at`  | Queue creation time.                                    |
+
+## Spaces and collaboration
+
+### `spaces`
+
+Stores collaboration groups. Its columns are `id`, `owner_id`, `name`, and `created_at`. A Space owner must transfer or delete owned Spaces before deleting their account.
+
+### `space_members`
+
+Join table connecting users to Spaces. The `space_id` and `user_id` pair is the primary key. `role` is `owner`, `editor`, or `viewer` and controls access to shared Reminders.
+
+### `space_reminders`
+
+Join table connecting Spaces and shared Reminders. It contains `space_id`, unique `reminder_id`, and `created_at`, which permits at most one Space per Reminder. Deleting either entity removes its join row.
+
+### `invitations`
+
+Stores reusable Space invitation links.
+
+| Column        | Meaning                                        |
+| ------------- | ---------------------------------------------- |
+| `id`          | Invitation UUID.                               |
+| `space_id`    | Space the recipient will join.                 |
+| `token`       | Unique token in the invitation link.           |
+| `role`        | Role granted on acceptance.                    |
+| `expires_at`  | Expiration time.                               |
+| `revoked`     | Whether the owner disabled the invitation.     |
+| `accepted_by` | User associated with acceptance, when present. |
+
+### `collaboration_activity`
+
+Stores collaborative Reminder events and Space discussion. `space_id` and `reminder_id` identify the related entities; `actor_id` identifies the user who caused the event; `event_type` classifies it; `body` is the visible message; `metadata` holds structured details; and `created_at` records the event time.
 
 ## Notifications
 
-| Table                            | Purpose                                                                                                                     |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `notification_inbox`             | Stores in-app notifications. It currently contains completion activity for shared Reminders and checklist steps.            |
-| `notification_devices`           | Stores Expo push tokens registered by a user's devices.                                                                     |
-| `notification_deliveries`        | Stores scheduled notification jobs for individual users, including due reminders, nudges, and collaboration activity.       |
-| `notification_device_deliveries` | Tracks each device delivery attempt, Expo ticket, receipt status, retry state, and delivery error.                          |
-| `notification_epochs`            | Stores each user's notification schedule generation. Incrementing it invalidates deliveries created from an older schedule. |
+### `notification_inbox`
+
+Stores in-app notifications. It currently contains completion activity for shared Reminders and checklist steps. Each row contains `id`, recipient `user_id`, optional `reminder_id`, `body`, `read`, `created_at`, and an optional unique `event_key` that prevents duplicate entries.
+
+### `notification_devices`
+
+Stores mobile push registrations. The Expo push `token` is the primary key, `user_id` owns it, and `updated_at` records the most recent registration refresh.
+
+### `notification_epochs`
+
+Stores one notification schedule generation per user. `user_id` is the primary key and `generation` increases whenever older scheduled work must become invalid.
+
+### `notification_deliveries`
+
+Stores logical notifications scheduled for individual users.
+
+| Column        | Meaning                                                  |
+| ------------- | -------------------------------------------------------- |
+| `id`          | Delivery UUID.                                           |
+| `reminder_id` | Related Reminder.                                        |
+| `revision`    | Reminder version used to schedule it.                    |
+| `user_id`     | Recipient.                                               |
+| `kind`        | Due, nudge, or collaboration delivery type.              |
+| `due_at`      | Time it becomes eligible to send.                        |
+| `generation`  | Recipient schedule generation.                           |
+| `body`        | Optional rendered message.                               |
+| `status`      | Current processing state.                                |
+| `attempts`    | Claim/send attempt count.                                |
+| `lease_until` | Worker lease expiration.                                 |
+| `claim_token` | Proof that a worker owns the lease.                      |
+| `receipt_ids` | Aggregate receipt data retained on the logical delivery. |
+| `last_error`  | Most recent error.                                       |
+
+The Reminder revision, user, kind, and generation combination is unique, preventing duplicate logical notifications.
+
+### `notification_device_deliveries`
+
+Stores the per-device state of a logical notification. The `delivery_id` and Expo `token` pair is the primary key. `status`, `attempts`, `ticket_id`, `accepted_at`, `receipt_status`, and `last_error` track sending and final receipt processing. Deleting the parent `notification_deliveries` row removes its device rows.
 
 ## AI processing
 
-| Table           | Purpose                                                                                                                                                                                                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ai_operations` | Stores one immediately applied AI command. It contains the stable request ID, original request, interpreted proposal, source snapshot, database actions, source-version dependencies, status, and saved result. The unique user/request ID pair makes retries return the original result without creating duplicate reminders. |
+### `ai_operations`
 
-The `/api/ai/process` route handles typed thoughts and voice recordings through the same workflow. If the AI needs clarification, it returns the question without creating an operation. Once the command is actionable, `apply_ai_operation` validates current source versions and applies every generated action atomically in the same database transaction.
+Stores one atomic, immediately applied AI command. Typed thoughts and voice recordings both use this table through `/api/ai/process`.
 
-## Reliability and account lifecycle
+| Column         | Meaning                                                   |
+| -------------- | --------------------------------------------------------- |
+| `id`           | Internal operation UUID.                                  |
+| `user_id`      | User who submitted the command.                           |
+| `request_id`   | Client idempotency UUID; unique together with `user_id`.  |
+| `request_body` | Original validated request.                               |
+| `proposal`     | Structured AI interpretation.                             |
+| `sources`      | Snapshot of Contexts and Reminders examined by the model. |
+| `actions`      | Validated mutations built from the proposal.              |
+| `dependencies` | Source IDs and versions that must still match.            |
+| `status`       | `processing` or `completed`.                              |
+| `result`       | Contexts and Reminders saved by the operation.            |
+| `created_at`   | Start time.                                               |
+| `completed_at` | Successful completion time.                               |
 
-| Table               | Purpose                                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `api_rate_limits`   | Stores atomic request counts by subject, API bucket, and time window.                                                               |
-| `account_deletions` | Tracks account-deletion requests, cleanup attempts, and failures. Its presence also prevents new writes while deletion is underway. |
+`apply_ai_operation` validates source versions and applies every action in one database transaction. Reusing the same request ID returns the saved result instead of creating duplicates. An AI response that only asks for clarification does not create an operation.
 
-## Main relationships
+## API protection
 
-- `profiles.id` corresponds to `auth.users.id`.
-- `space_members` joins users to `spaces` and owns membership roles.
-- `context_reminders` joins `contexts` to `reminders`.
-- `space_reminders` joins `spaces` to `reminders`.
-- `collaboration_activity` and `notification_inbox` can reference the Reminder that produced an event.
-- `notification_device_deliveries` belongs to `notification_deliveries`; devices are addressed using the stored token.
-- `reminder_recurrences` links a recurring parent Reminder to its next occurrence.
+### `api_rate_limits`
 
-The live schema does not contain the former `records`, `operations`, `outbox`, `recurrences`, `activity`, `inbox`, `devices`, `deliveries`, `device_deliveries`, `ai_reviews`, or `ai_proposals` tables. It also has no `members` compatibility view. Application code must use the domain-specific names documented above.
+Stores atomic backend API rate-limit counters. The composite primary key contains `subject`, policy `bucket`, and `window_start`; `count` records requests consumed during that window.
+
+## Schema rules
+
+- `contexts` and `reminders` are separate authoritative tables. There is no generic `records` table.
+- Independent entity relationships use `context_reminders`, `space_members`, and `space_reminders` join tables.
+- Reminder write idempotency belongs to `reminder_operations`; AI request idempotency belongs to `ai_operations`.
+- Notification tables use the `notification_` prefix. Reminder scheduling input uses `reminder_outbox`.
+- There are no compatibility views.
+- The old `members`, `records`, `operations`, `outbox`, `recurrences`, `activity`, `inbox`, `devices`, `deliveries`, `device_deliveries`, `ai_reviews`, and `ai_proposals` relations no longer exist.
