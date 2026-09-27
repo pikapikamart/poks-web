@@ -56,6 +56,7 @@ export const POST = withApiErrorHandling(
       const file = await audio(request);
       context.stage = "transcription";
       const text = await transcribe(file);
+      console.log(text);
       const url = new URL(request.url);
       input = interpretSchema.parse({
         requestId: url.searchParams.get("requestId"),

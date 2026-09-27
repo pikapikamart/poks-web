@@ -110,7 +110,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     "direct writes reject malformed fields and null versions",
     async () => {
       for (const bad of [
-        { priority: null },
+        { recurrence: null },
         { nudgeMinutes: null },
         { nudgeMinutes: 1.5 },
         { notes: 7 },
@@ -196,7 +196,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     }));
 
     const invalid = JSON.parse(JSON.stringify(actions));
-    invalid[1].record.content.priority = null;
+    invalid[1].record.content.recurrence = null;
     await assert.rejects(applyOperation(crypto.randomUUID(), body, invalid));
     assert.equal(
       (await db.query("select id from reminders where id=$1", [first.id])).rows

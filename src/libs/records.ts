@@ -8,7 +8,6 @@ export const blankContent = (timeZone = "UTC"): Content => {
     dueAt: null,
     dueDate: null,
     timeZone,
-    priority: "normal",
     recurrence: "none",
     nudgeMinutes: 3,
     completed: false,

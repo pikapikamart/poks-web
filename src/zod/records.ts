@@ -17,7 +17,6 @@ export const contentSchema = z
     dueAt: z.string().datetime({ offset: true }).nullable(),
     dueDate: z.string().date().nullable(),
     timeZone: zoneSchema,
-    priority: z.enum(["low", "normal", "high", "critical"]),
     recurrence: z.enum(["none", "daily", "weekly", "monthly", "yearly"]),
     nudgeMinutes: z.number().int().min(0).max(10080),
     completed: z.boolean(),

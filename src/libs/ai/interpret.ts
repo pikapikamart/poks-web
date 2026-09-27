@@ -27,6 +27,7 @@ const buildInterpretInstructions = (timeZone: string) => {
     "Retrieval is bounded: an absent match does not prove a Context does not exist.",
     "Preserve every field the user did not ask to change on updates.",
     "Never invent a date for an undated thought.",
+    "When a user explicitly gives a daypart with a date, schedule it as a precise local time: morning is 09:00, afternoon is 14:00, evening is 18:00, and tonight is 20:00. Use dueAt with that date and the supplied timeZone.",
     "Date-only requests use dueDate; precise times use dueAt with an ISO offset.",
     "Use referenceTime and timeZone.",
     "Context definitions are reusable; their executions have recordKind instance and templateId.",
