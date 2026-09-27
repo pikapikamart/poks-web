@@ -178,12 +178,3 @@ Stores one atomic, immediately applied AI command. Typed thoughts and voice reco
 ### `api_rate_limits`
 
 Stores atomic backend API rate-limit counters. The composite primary key contains `subject`, policy `bucket`, and `window_start`; `count` records requests consumed during that window.
-
-## Schema rules
-
-- `contexts` and `reminders` are separate authoritative tables. There is no generic `records` table.
-- Independent entity relationships use `context_reminders`, `space_members`, and `space_reminders` join tables.
-- Reminder write idempotency belongs to `reminder_operations`; AI request idempotency belongs to `ai_operations`.
-- Notification tables use the `notification_` prefix. Reminder scheduling input uses `reminder_outbox`.
-- There are no compatibility views.
-- The old `members`, `records`, `operations`, `outbox`, `recurrences`, `activity`, `inbox`, `devices`, `deliveries`, `device_deliveries`, `ai_reviews`, and `ai_proposals` relations no longer exist.
