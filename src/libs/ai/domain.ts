@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { DateTime } from "luxon";
 import { modelProposalSchema } from "@/zod/ai";
 import { contentSchema, type PoxRecord, type Mutation } from "@/zod/records";
 import { proposalSchema, type Proposal } from "@/zod/ai";
@@ -77,6 +78,83 @@ export const normalizeProposal = (
       };
     }),
   });
+};
+
+export const fillNewReminderNotes = (
+  proposal: Proposal,
+  thought: string,
+): Proposal => {
+  if (proposal.actions.length !== 1) {
+    return proposal;
+  }
+
+  const action = proposal.actions[0];
+
+  if (
+    action.kind !== "create" ||
+    action.recordKind === "context" ||
+    action.content.notes.trim()
+  ) {
+    return proposal;
+  }
+
+  return {
+    ...proposal,
+    actions: [
+      {
+        ...action,
+        content: { ...action.content, notes: thought.trim() },
+      },
+    ],
+  };
+};
+
+export const defaultDatedReminderTimes = (
+  proposal: Proposal,
+  records: PoxRecord[],
+  timeZone: string,
+): Proposal => {
+  return {
+    ...proposal,
+    actions: proposal.actions.map((action) => {
+      if (action.recordKind === "context" || !action.content.dueDate) {
+        return action;
+      }
+
+      const source = records.find((record) => record.id === action.targetId);
+
+      if (
+        action.kind === "update" &&
+        source?.content.dueDate === action.content.dueDate
+      ) {
+        return action;
+      }
+
+      const dueAt = DateTime.fromISO(action.content.dueDate, {
+        zone: timeZone,
+      })
+        .set({ hour: 9, minute: 0, second: 0, millisecond: 0 })
+        .toISO({ suppressMilliseconds: true });
+
+      if (!dueAt) {
+        throw new HttpError(
+          422,
+          "Choose a valid reminder date.",
+          "INVALID_AI_DATE",
+        );
+      }
+
+      return {
+        ...action,
+        content: {
+          ...action.content,
+          dueAt,
+          dueDate: null,
+          timeZone,
+        },
+      };
+    }),
+  };
 };
 
 export const buildActions = (

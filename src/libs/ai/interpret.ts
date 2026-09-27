@@ -7,7 +7,11 @@ import { type PoxRecord } from "@/zod/records";
 import { env } from "@/libs/env";
 import { HttpError } from "@/libs/http";
 import { modelProposalSchema } from "@/zod/ai";
-import { normalizeProposal } from "@/libs/ai/domain";
+import {
+  defaultDatedReminderTimes,
+  fillNewReminderNotes,
+  normalizeProposal,
+} from "@/libs/ai/domain";
 
 const buildInterpretInstructions = (timeZone: string) => {
   const blank = JSON.stringify(blankContent(timeZone));
@@ -23,12 +27,15 @@ const buildInterpretInstructions = (timeZone: string) => {
     "Do not guess between similarly named spaces or invent a space ID.",
     "Consider the supplied Context definitions when creating a reminder.",
     "Create an instance from a Context when the thought clearly calls for that reusable process or explicitly names it; otherwise create a normal reminder.",
+    "For every new reminder or Context instance, write a brief, helpful note in content.notes. Capture relevant details or intent from the user's thought and any supplied Context, without merely repeating the title.",
+    "Do not invent facts, amounts, dates, steps, or instructions for a note. If the thought has no extra detail, briefly restate its intent. Keep existing notes on updates unless the user asks to change them.",
     "Ask a concise clarification with no actions only when the requested change depends on choosing between genuinely ambiguous existing memories, Contexts, spaces, or account people, or when it cannot be safely inferred.",
     "Retrieval is bounded: an absent match does not prove a Context does not exist.",
     "Preserve every field the user did not ask to change on updates.",
     "Never invent a date for an undated thought.",
     "When a user explicitly gives a daypart with a date, schedule it as a precise local time: morning is 09:00, afternoon is 14:00, evening is 18:00, and tonight is 20:00. Use dueAt with that date and the supplied timeZone.",
-    "Date-only requests use dueDate; precise times use dueAt with an ISO offset.",
+    "When a reminder has a date but the user gives no clock time or daypart, schedule it for 09:00 on that date in the supplied timeZone. Use dueAt with an ISO offset and leave dueDate null.",
+    "Keep reminders without a date undated. Respect any clock time or daypart the user gives instead of the 09:00 default.",
     "Use referenceTime and timeZone.",
     "Context definitions are reusable; their executions have recordKind instance and templateId.",
     "Required steps determine completion.",
@@ -102,5 +109,8 @@ export const interpretThought = async (
     );
   }
 
-  return normalizeProposal(raw, records);
+  const proposal = normalizeProposal(raw, records);
+  const withNotes = fillNewReminderNotes(proposal, input.text);
+
+  return defaultDatedReminderTimes(withNotes, records, input.timeZone);
 };

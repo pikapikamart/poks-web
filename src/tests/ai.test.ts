@@ -9,6 +9,8 @@ import {
   normalizeProposal,
   buildActions,
   boundedSources,
+  defaultDatedReminderTimes,
+  fillNewReminderNotes,
 } from "@/libs/ai/domain";
 
 const user = crypto.randomUUID();
@@ -153,4 +155,177 @@ test("AI actions preserve source fields and reject stale source or template vers
       buildActions(proposal, [template], [{ ...template, version: 4 }], user),
     /Context changed/,
   );
+});
+
+test("a date-only spoken reminder is scheduled for 9 AM in the user's time zone", () => {
+  const proposal: Proposal = {
+    summary: "Pay the Converge internet plan",
+    question: null,
+    actions: [
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "reminder",
+        spaceId: null,
+        content: {
+          ...blankContent("Asia/Manila"),
+          title: "Pay the Converge internet plan",
+          dueDate: "2026-09-29",
+        },
+      },
+    ],
+  };
+
+  const scheduled = defaultDatedReminderTimes(proposal, [], "Asia/Manila");
+  const saved = buildActions(scheduled, [], [], user)[0].record.content;
+
+  assert.equal(saved.dueAt, "2026-09-29T09:00:00+08:00");
+  assert.equal(saved.dueDate, null);
+});
+
+test("a single recorded reminder keeps AI notes or falls back to the user's words", () => {
+  const action: Proposal["actions"][number] = {
+    kind: "create",
+    targetId: null,
+    recordKind: "reminder",
+    spaceId: null,
+    content: { ...blankContent(), title: "Pay internet bill" },
+  };
+  const proposal: Proposal = {
+    summary: "Pay the bill",
+    question: null,
+    actions: [action],
+  };
+  const thought = "Pay the Converge internet plan on September twenty-nine";
+
+  const fallback = fillNewReminderNotes(proposal, thought);
+  const saved = buildActions(fallback, [], [], user)[0].record.content;
+
+  assert.equal(saved.notes, thought);
+  assert.equal(
+    fillNewReminderNotes(
+      {
+        ...proposal,
+        actions: [
+          {
+            ...action,
+            content: {
+              ...action.content,
+              notes: "Settle the Converge internet plan payment.",
+            },
+          },
+        ],
+      },
+      thought,
+    ).actions[0].content.notes,
+    "Settle the Converge internet plan payment.",
+  );
+});
+
+test("notes fallback does not attach one thought to multiple reminders or overwrite updates", () => {
+  const existing = record();
+  const action: Proposal["actions"][number] = {
+    kind: "create",
+    targetId: null,
+    recordKind: "reminder",
+    spaceId: null,
+    content: { ...blankContent(), title: "First" },
+  };
+  const multiple: Proposal = {
+    summary: "Two reminders",
+    question: null,
+    actions: [
+      action,
+      { ...action, content: { ...action.content, title: "Second" } },
+    ],
+  };
+  const updated: Proposal = {
+    summary: "Change an existing reminder",
+    question: null,
+    actions: [
+      {
+        kind: "update",
+        targetId: existing.id,
+        recordKind: "reminder",
+        spaceId: null,
+        content: existing.content,
+      },
+    ],
+  };
+
+  assert.deepEqual(
+    fillNewReminderNotes(multiple, "Do both").actions,
+    multiple.actions,
+  );
+  assert.equal(
+    fillNewReminderNotes(updated, "Change it").actions[0].content.notes,
+    "Keep these instructions",
+  );
+});
+
+test("the 9 AM default respects daylight saving time and existing scheduling choices", () => {
+  const existing = record();
+  existing.content.dueDate = "2026-11-01";
+  const dateOnly = {
+    ...blankContent("America/New_York"),
+    dueDate: "2026-11-01",
+  };
+  const precise = {
+    ...blankContent("America/New_York"),
+    dueAt: "2026-11-01T14:00:00-05:00",
+  };
+  const proposal: Proposal = {
+    summary: "Mixed scheduling",
+    question: null,
+    actions: [
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "instance",
+        spaceId: null,
+        content: dateOnly,
+      },
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "reminder",
+        spaceId: null,
+        content: precise,
+      },
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "reminder",
+        spaceId: null,
+        content: blankContent(),
+      },
+      {
+        kind: "update",
+        targetId: existing.id,
+        recordKind: "reminder",
+        spaceId: null,
+        content: existing.content,
+      },
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "context",
+        spaceId: null,
+        content: dateOnly,
+      },
+    ],
+  };
+
+  const actions = defaultDatedReminderTimes(
+    proposal,
+    [existing],
+    "America/New_York",
+  ).actions;
+
+  assert.equal(actions[0].content.dueAt, "2026-11-01T09:00:00-05:00");
+  assert.equal(actions[0].content.dueDate, null);
+  assert.equal(actions[1].content.dueAt, precise.dueAt);
+  assert.equal(actions[2].content.dueAt, null);
+  assert.equal(actions[3].content.dueDate, "2026-11-01");
+  assert.equal(actions[4].content.dueDate, "2026-11-01");
 });
