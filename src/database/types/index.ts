@@ -271,7 +271,7 @@ export type Database = {
           last_error: string | null;
           lease_until: string | null;
           receipt_ids: Json;
-          reminder_id: string;
+          reminder_id: string | null;
           revision: number;
           status: string;
           user_id: string;
@@ -287,7 +287,7 @@ export type Database = {
           last_error?: string | null;
           lease_until?: string | null;
           receipt_ids?: Json;
-          reminder_id: string;
+          reminder_id?: string | null;
           revision: number;
           status?: string;
           user_id: string;
@@ -303,7 +303,7 @@ export type Database = {
           last_error?: string | null;
           lease_until?: string | null;
           receipt_ids?: Json;
-          reminder_id?: string;
+          reminder_id?: string | null;
           revision?: number;
           status?: string;
           user_id?: string;
@@ -722,7 +722,7 @@ export type Database = {
           last_error: string | null;
           lease_until: string | null;
           receipt_ids: Json;
-          reminder_id: string;
+          reminder_id: string | null;
           revision: number;
           status: string;
           user_id: string;

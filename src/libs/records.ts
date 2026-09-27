@@ -9,7 +9,7 @@ export const blankContent = (timeZone = "UTC"): Content => {
     dueDate: null,
     timeZone,
     recurrence: "none",
-    nudgeMinutes: 3,
+    nudgeMinutes: 5,
     completed: false,
     archived: false,
     templateId: null,

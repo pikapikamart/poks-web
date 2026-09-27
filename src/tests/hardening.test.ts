@@ -234,6 +234,34 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     },
   );
   await t.test(
+    "removing a Space member notifies them without transferring ownership",
+    async () => {
+      await assert.rejects(
+        db.query("select manage_member($1,$2,'owner')", [space, bob]),
+        /INVALID_ROLE/,
+      );
+      await db.query("select manage_member($1,$2,null)", [space, bob]);
+      await asAdmin(db);
+
+      const inbox = await db.query<{ body: string }>(
+        "select body from notification_inbox where user_id=$1 and event_key=$2",
+        [bob, `space-removal:${space}:${bob}`],
+      );
+      const delivery = await db.query<{
+        reminder_id: string | null;
+        body: string | null;
+      }>(
+        "select reminder_id,body from notification_deliveries where user_id=$1 and kind=$2",
+        [bob, `space-removal:${space}:${bob}`],
+      );
+
+      assert.match(inbox.rows[0].body, /removed from Team/);
+      assert.equal(delivery.rows[0].reminder_id, null);
+      assert.match(delivery.rows[0].body ?? "", /removed from Team/);
+      await asUser(db);
+    },
+  );
+  await t.test(
     "preference changes reschedule without causing content version conflicts",
     async () => {
       await db.query("insert into profiles(id,preferences) values($1,$2)", [

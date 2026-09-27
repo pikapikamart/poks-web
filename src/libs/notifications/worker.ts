@@ -207,6 +207,20 @@ export const advanceRecurrences = async () => {
 };
 
 const eligibleRecord = async (job: Delivery) => {
+  if (!job.reminder_id) {
+    const deleting = checked(
+      await createServerClient()
+        .from("account_deletions")
+        .select("user_id")
+        .eq("user_id", job.user_id)
+        .maybeSingle(),
+    );
+
+    return !deleting && (await generation(job.user_id)) === job.generation
+      ? undefined
+      : null;
+  }
+
   const raw = checked(
     await createServerClient()
       .from("reminders")
@@ -256,7 +270,7 @@ export const sendDueNotifications = async () => {
     try {
       const record = await eligibleRecord(job);
 
-      if (!record) {
+      if (record === null) {
         await finish(job, { status: "cancelled" });
         continue;
       }
@@ -275,6 +289,7 @@ export const sendDueNotifications = async () => {
       }
 
       if (
+        record &&
         job.kind === "nudge" &&
         Date.parse(dueTime(record.content, prefs) ?? "1970-01-01") <= now
       ) {
@@ -284,9 +299,11 @@ export const sendDueNotifications = async () => {
 
       const body =
         job.body ??
-        (job.kind === "nudge"
-          ? `Coming up: ${record.content.title}`
-          : record.content.title);
+        (record
+          ? job.kind === "nudge"
+            ? `Coming up: ${record.content.title}`
+            : record.content.title
+          : "A Space you shared has changed.");
 
       const devices =
         checked(
@@ -305,17 +322,18 @@ export const sendDueNotifications = async () => {
         );
       }
 
-      const previous =
-        checked(
+      const previous = record
+        ? (checked(
           await db
             .from("notification_deliveries")
             .select("id")
-            .eq("reminder_id", job.reminder_id)
+            .eq("reminder_id", record.id)
             .eq("revision", job.revision)
             .eq("user_id", job.user_id)
             .eq("kind", job.kind)
             .neq("id", job.id),
-        ) ?? [];
+        ) ?? [])
+        : [];
 
       if (previous.length) {
         const accepted =
@@ -366,7 +384,7 @@ export const sendDueNotifications = async () => {
               .maybeSingle(),
           );
 
-          if (!lease || !(await eligibleRecord(job))) {
+          if (!lease || (await eligibleRecord(job)) === null) {
             return false;
           }
 
@@ -384,14 +402,21 @@ export const sendDueNotifications = async () => {
         send: async (token) => {
           const value = await expoRequest("send", {
             to: token,
-            title: job.kind === "nudge" ? "A little nudge" : "Pox remembers",
+            title: job.kind.startsWith("space-removal:")
+              ? "Space update"
+              : job.kind === "nudge"
+                ? "A little nudge"
+                : "Pox remembers",
             body,
             data: {
-              recordId: record.id,
+              recordId: record?.id,
               eventId: job.id,
               revision: job.revision,
             },
-            categoryId: job.kind.startsWith("activity:") ? undefined : "memory",
+            categoryId:
+              record && !job.kind.startsWith("activity:")
+                ? "memory"
+                : undefined,
             channelId: job.kind === "nudge" ? "gentle-v3" : "reminders-v3",
             sound: "default",
             priority: job.kind === "nudge" ? "normal" : "high",
