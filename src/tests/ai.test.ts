@@ -11,6 +11,7 @@ import {
   boundedSources,
   defaultDatedReminderTimes,
   fillNewReminderNotes,
+  correctTomorrowReminderDate,
 } from "@/libs/ai/domain";
 
 const user = crypto.randomUUID();
@@ -181,6 +182,76 @@ test("a date-only spoken reminder is scheduled for 9 AM in the user's time zone"
 
   assert.equal(saved.dueAt, "2026-09-29T09:00:00+08:00");
   assert.equal(saved.dueDate, null);
+});
+
+test("tomorrow at 7 PM uses the next local day when the model picks today", () => {
+  const action: Proposal["actions"][number] = {
+    kind: "create",
+    targetId: null,
+    recordKind: "reminder",
+    spaceId: null,
+    content: {
+      ...blankContent("Asia/Manila"),
+      title: "Close all Pokemon shops",
+      dueAt: "2026-09-28T19:00:00+08:00",
+    },
+  };
+  const proposal: Proposal = {
+    summary: "Close the shops",
+    question: null,
+    actions: [action],
+  };
+  const corrected = correctTomorrowReminderDate(
+    proposal,
+    "Remind me tomorrow 7 p.m. to close all Pokemon shops.",
+    "2026-09-28T00:13:00Z",
+    "Asia/Manila",
+  );
+
+  assert.equal(corrected.actions[0].content.dueAt, "2026-09-29T19:00:00+08:00");
+  assert.equal(corrected.actions[0].content.dueDate, null);
+  assert.equal(action.content.dueAt, "2026-09-28T19:00:00+08:00");
+});
+
+test("tomorrow correction follows the user's local date across UTC midnight", () => {
+  const proposal: Proposal = {
+    summary: "Follow up",
+    question: null,
+    actions: [
+      {
+        kind: "create",
+        targetId: null,
+        recordKind: "reminder",
+        spaceId: null,
+        content: { ...blankContent("Asia/Manila"), dueDate: "2026-09-28" },
+      },
+    ],
+  };
+  const corrected = correctTomorrowReminderDate(
+    proposal,
+    "Remind me tomorrow to follow up",
+    "2026-09-27T17:30:00Z",
+    "Asia/Manila",
+  );
+
+  assert.equal(corrected.actions[0].content.dueDate, "2026-09-29");
+  assert.equal(
+    correctTomorrowReminderDate(
+      {
+        ...proposal,
+        actions: [
+          {
+            ...proposal.actions[0],
+            content: { ...proposal.actions[0].content, dueDate: "2026-10-04" },
+          },
+        ],
+      },
+      "Remind me tomorrow about October 4",
+      "2026-09-27T17:30:00Z",
+      "Asia/Manila",
+    ).actions[0].content.dueDate,
+    "2026-10-04",
+  );
 });
 
 test("a single recorded reminder keeps AI notes or falls back to the user's words", () => {

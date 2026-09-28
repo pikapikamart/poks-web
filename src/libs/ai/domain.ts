@@ -109,6 +109,83 @@ export const fillNewReminderNotes = (
   };
 };
 
+export const correctTomorrowReminderDate = (
+  proposal: Proposal,
+  thought: string,
+  referenceTime: string,
+  timeZone: string,
+): Proposal => {
+  if (
+    proposal.question ||
+    proposal.actions.length !== 1 ||
+    !/\btomorrow\b/i.test(thought) ||
+    /\bday after tomorrow\b/i.test(thought)
+  ) {
+    return proposal;
+  }
+
+  const action = proposal.actions[0];
+
+  if (action.kind !== "create" || action.recordKind === "context") {
+    return proposal;
+  }
+
+  const today = DateTime.fromISO(referenceTime, { setZone: true }).setZone(
+    timeZone,
+  );
+  const tomorrow = today.plus({ days: 1 });
+  const todayDate = today.toISODate();
+  const tomorrowDate = tomorrow.toISODate();
+
+  if (action.content.dueAt) {
+    const dueAt = DateTime.fromISO(action.content.dueAt, {
+      setZone: true,
+    }).setZone(timeZone);
+
+    if (dueAt.toISODate() !== todayDate) {
+      return proposal;
+    }
+
+    const corrected = dueAt.set({
+      year: tomorrow.year,
+      month: tomorrow.month,
+      day: tomorrow.day,
+    });
+
+    return {
+      ...proposal,
+      actions: [
+        {
+          ...action,
+          content: {
+            ...action.content,
+            dueAt: corrected.toISO({ suppressMilliseconds: true }),
+            timeZone,
+          },
+        },
+      ],
+    };
+  }
+
+  if (action.content.dueDate !== todayDate) {
+    return proposal;
+  }
+
+  return {
+    ...proposal,
+    actions: [
+      {
+        ...action,
+        content: {
+          ...action.content,
+          dueDate: tomorrowDate,
+          timeZone,
+        },
+      },
+    ],
+  };
+};
+
 export const defaultDatedReminderTimes = (
   proposal: Proposal,
   records: PoxRecord[],

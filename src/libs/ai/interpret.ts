@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { z } from "zod";
+import { DateTime } from "luxon";
 import { blankContent } from "@/libs/records";
 import { interpretSchema } from "@/zod/ai";
 import { type PoxRecord } from "@/zod/records";
@@ -11,10 +12,17 @@ import {
   defaultDatedReminderTimes,
   fillNewReminderNotes,
   normalizeProposal,
+  correctTomorrowReminderDate,
 } from "@/libs/ai/domain";
 
-const buildInterpretInstructions = (timeZone: string) => {
+const buildInterpretInstructions = (
+  timeZone: string,
+  referenceTime: string,
+) => {
   const blank = JSON.stringify(blankContent(timeZone));
+  const localNow = DateTime.fromISO(referenceTime, { setZone: true }).setZone(
+    timeZone,
+  );
 
   return [
     "Interpret Pox memories and Contexts.",
@@ -36,7 +44,8 @@ const buildInterpretInstructions = (timeZone: string) => {
     "When a user explicitly gives a daypart with a date, schedule it as a precise local time: morning is 09:00, afternoon is 14:00, evening is 18:00, and tonight is 20:00. Use dueAt with that date and the supplied timeZone.",
     "When a reminder has a date but the user gives no clock time or daypart, schedule it for 09:00 on that date in the supplied timeZone. Use dueAt with an ISO offset and leave dueDate null.",
     "Keep reminders without a date undated. Respect any clock time or daypart the user gives instead of the 09:00 default.",
-    "Use referenceTime and timeZone.",
+    `The reference time in ${timeZone} is ${localNow.toFormat("yyyy-MM-dd HH:mm ZZZZ")}. Today is ${localNow.toISODate()} and tomorrow is ${localNow.plus({ days: 1 }).toISODate()} in that time zone. Resolve relative dates against this local calendar, not the UTC date.`,
+    "Use referenceTime and timeZone. When the user says tomorrow, never schedule the reminder for today's local date.",
     "Context definitions are reusable; their executions have recordKind instance and templateId.",
     "Required steps determine completion.",
     "Never change sharing on an existing record.",
@@ -73,7 +82,10 @@ export const interpretThought = async (
       input: [
         {
           role: "system",
-          content: buildInterpretInstructions(input.timeZone),
+          content: buildInterpretInstructions(
+            input.timeZone,
+            input.referenceTime,
+          ),
         },
         {
           role: "user",
@@ -111,6 +123,12 @@ export const interpretThought = async (
 
   const proposal = normalizeProposal(raw, records);
   const withNotes = fillNewReminderNotes(proposal, input.text);
+  const withCorrectedDate = correctTomorrowReminderDate(
+    withNotes,
+    input.text,
+    input.referenceTime,
+    input.timeZone,
+  );
 
-  return defaultDatedReminderTimes(withNotes, records, input.timeZone);
+  return defaultDatedReminderTimes(withCorrectedDate, records, input.timeZone);
 };
