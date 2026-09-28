@@ -40,6 +40,7 @@ const buildInterpretInstructions = (
     "Ask a concise clarification with no actions only when the requested change depends on choosing between genuinely ambiguous existing memories, Contexts, spaces, or account people, or when it cannot be safely inferred.",
     "Retrieval is bounded: an absent match does not prove a Context does not exist.",
     "Preserve every field the user did not ask to change on updates.",
+    "When targetRecordId is supplied, update only that record. Return exactly one update action with that target ID; never create a new record or edit another record. Keep its existing sharing, Context, and checklist progress unless the user explicitly changes them.",
     "Never invent a date for an undated thought.",
     "When a user explicitly gives a daypart with a date, schedule it as a precise local time: morning is 09:00, afternoon is 14:00, evening is 18:00, and tonight is 20:00. Use dueAt with that date and the supplied timeZone.",
     "When a reminder has a date but the user gives no clock time or daypart, schedule it for 09:00 on that date in the supplied timeZone. Use dueAt with an ISO offset and leave dueDate null.",

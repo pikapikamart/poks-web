@@ -6,6 +6,7 @@ import {
 } from "@/database/ai-operations";
 import {
   findRecordsBySearchTerms,
+  findRecordsByIds,
   listContextRecords,
   listRecentRecords,
 } from "@/libs/record-sources";
@@ -63,6 +64,7 @@ export const POST = withApiErrorHandling(
         text,
         timeZone: url.searchParams.get("timeZone"),
         referenceTime: url.searchParams.get("referenceTime"),
+        targetRecordId: url.searchParams.get("targetRecordId") ?? undefined,
       });
     }
 
@@ -105,15 +107,43 @@ export const POST = withApiErrorHandling(
         ?.slice(0, 40)
         .join(" OR ") ?? "";
     const [matching, contexts, recent, spaces, people] = await Promise.all([
-      findRecordsBySearchTerms(db, terms),
-      listContextRecords(db),
-      listRecentRecords(db),
+      input.targetRecordId
+        ? findRecordsByIds(db, [input.targetRecordId])
+        : findRecordsBySearchTerms(db, terms),
+      input.targetRecordId ? Promise.resolve([]) : listContextRecords(db),
+      input.targetRecordId ? Promise.resolve([]) : listRecentRecords(db),
       listSpaces(db),
       listProfiles(db),
     ]);
+
+    if (
+      input.targetRecordId &&
+      !matching.some(
+        (row) =>
+          row.id === input.targetRecordId &&
+          !row.deleted &&
+          row.kind !== "context",
+      )
+    ) {
+      throw new HttpError(
+        404,
+        "This reminder is no longer available to edit.",
+        "INVALID_AI_TARGET",
+      );
+    }
+
+    const target = input.targetRecordId
+      ? recordSchema.parse(
+        matching.find((row) => row.id === input.targetRecordId),
+      )
+      : null;
+    const linkedContext = target?.content.templateId
+      ? await findRecordsByIds(db, [target.content.templateId])
+      : [];
+
     const records = boundedSources([
       ...new Map(
-        [...matching, ...contexts, ...recent].map((row) => {
+        [...matching, ...linkedContext, ...contexts, ...recent].map((row) => {
           const record = recordSchema.parse(row);
 
           return [record.id, record] as const;
@@ -123,6 +153,20 @@ export const POST = withApiErrorHandling(
 
     context.stage = "interpretation";
     const proposal = await interpretThought(input, records, spaces, people);
+
+    if (
+      input.targetRecordId &&
+      !proposal.question &&
+      (proposal.actions.length !== 1 ||
+        proposal.actions[0].kind !== "update" ||
+        proposal.actions[0].targetId !== input.targetRecordId)
+    ) {
+      throw new HttpError(
+        422,
+        "Please record a change to this reminder.",
+        "INVALID_AI_TARGET",
+      );
+    }
 
     if (!proposal.question && proposal.actions.length) {
       context.stage = "application";

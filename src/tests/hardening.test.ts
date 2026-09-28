@@ -134,7 +134,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       await assert.rejects(
         db.query("insert into profiles(id,preferences) values($1,$2)", [
           alice,
-          JSON.stringify({ ...defaultPreferences, snoozeMinutes: null }),
+          JSON.stringify({ ...defaultPreferences, intensity: "loud" }),
         ]),
         /INVALID_PREFERENCES/,
       );
@@ -147,6 +147,56 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       save({ ...r, kind: "context" }, 1),
       /INVALID_KIND_CHANGE/,
     );
+  });
+  await t.test("a reminder can adopt and remove a Context", async () => {
+    const step = {
+      id: crypto.randomUUID(),
+      title: "First step",
+      required: true,
+      completed: false,
+      assignee: null,
+      instructions: "",
+    };
+    const context = {
+      ...record("Reusable steps"),
+      kind: "context",
+      content: { ...blankContent(), title: "Reusable steps", items: [step] },
+    };
+    const reminder = record("Use those steps");
+
+    await save(context);
+    await save(reminder);
+    const withContext = await save(
+      {
+        ...reminder,
+        kind: "instance",
+        content: {
+          ...reminder.content,
+          templateId: context.id,
+          items: [{ ...step, id: crypto.randomUUID() }],
+        },
+      },
+      1,
+    );
+
+    assert.equal(withContext.rows[0].result.version, 2);
+    assert.equal(
+      (
+        await db.query<{ kind: string }>(
+          "select kind from reminders where id=$1",
+          [reminder.id],
+        )
+      ).rows[0].kind,
+      "instance",
+    );
+
+    await save(reminder, 2);
+    const links = await db.query<{ count: string }>(
+      "select count(*) from context_reminders where reminder_id=$1",
+      [reminder.id],
+    );
+
+    assert.equal(Number(links.rows[0].count), 0);
   });
   const request = crypto.randomUUID();
   const body = { text: "Update the reminder" };

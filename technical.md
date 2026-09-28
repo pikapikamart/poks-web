@@ -583,7 +583,6 @@ Users should eventually be able to configure:
 - Notification intensity
 - Nudge timing
 - Reminder repetition
-- Snooze behavior
 - Quiet hours
 - Priority behavior
 

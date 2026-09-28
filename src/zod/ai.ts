@@ -28,6 +28,7 @@ export const interpretSchema = z.object({
   timeZone: zoneSchema,
   referenceTime: z.string().datetime(),
   clarification: z.string().max(4000).optional(),
+  targetRecordId: uuid.optional(),
 });
 
 // JSON Schema cannot encode custom domain refinements. Validate those after parsing.

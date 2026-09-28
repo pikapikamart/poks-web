@@ -7,7 +7,6 @@ export const defaultPreferences: Preferences = {
   quietEnd: null,
   quietEndMinute: 0,
   intensity: "normal",
-  snoozeMinutes: 10,
   repeatMinutes: 0,
   defaultDateHour: null,
 };

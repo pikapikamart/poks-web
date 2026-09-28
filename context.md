@@ -289,7 +289,6 @@ Users should eventually be able to control:
 - Nudge timing
 - Notification intensity
 - Repetition
-- Snooze behavior
 - Priority
 - Quiet hours
 

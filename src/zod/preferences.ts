@@ -8,7 +8,6 @@ export const preferencesSchema = z.object({
   quietEnd: z.number().int().min(0).max(23).nullable(),
   quietEndMinute: z.number().int().min(0).max(59).optional(),
   intensity: z.enum(["subtle", "normal"]),
-  snoozeMinutes: z.number().int().min(1).max(1440),
   repeatMinutes: z.number().int().min(0).max(1440),
   defaultDateHour: z.number().int().min(0).max(23).nullable(),
 });
