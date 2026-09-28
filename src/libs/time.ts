@@ -76,29 +76,38 @@ export const afterQuietHours = (iso: string, prefs: Preferences): string => {
   if (
     prefs.quietStart === null ||
     prefs.quietEnd === null ||
-    prefs.quietStart === prefs.quietEnd
+    prefs.quietStart * 60 + (prefs.quietStartMinute ?? 0) ===
+      prefs.quietEnd * 60 + (prefs.quietEndMinute ?? 0)
   ) {
     return iso;
   }
 
   let time = DateTime.fromISO(iso).setZone(prefs.timeZone);
 
-  const h = time.hour;
-  const start = prefs.quietStart;
-  const end = prefs.quietEnd;
+  const current = time.hour * 60 + time.minute;
+  const start = prefs.quietStart * 60 + (prefs.quietStartMinute ?? 0);
+  const end = prefs.quietEnd * 60 + (prefs.quietEndMinute ?? 0);
 
-  const quiet = start < end ? h >= start && h < end : h >= start || h < end;
+  const quiet =
+    start < end
+      ? current >= start && current < end
+      : current >= start || current < end;
 
   if (!quiet) {
     return iso;
   }
 
-  if (start > end && h >= start) {
+  if (start > end && current >= start) {
     time = time.plus({ days: 1 });
   }
 
   return time
-    .set({ hour: end, minute: 0, second: 0, millisecond: 0 })
+    .set({
+      hour: prefs.quietEnd,
+      minute: prefs.quietEndMinute ?? 0,
+      second: 0,
+      millisecond: 0,
+    })
     .toUTC()
     .toISO()!;
 };

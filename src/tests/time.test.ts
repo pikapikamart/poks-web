@@ -122,3 +122,30 @@ test("quiet hours cross midnight and date-only reminders stay quiet", () => {
     false,
   );
 });
+
+test("quiet hours respect selected minutes at both boundaries", () => {
+  const preferences = {
+    ...defaultPreferences,
+    quietStart: 22,
+    quietStartMinute: 30,
+    quietEnd: 7,
+    quietEndMinute: 15,
+  };
+
+  assert.equal(
+    afterQuietHours("2026-09-22T22:29:00Z", preferences),
+    "2026-09-22T22:29:00Z",
+  );
+  assert.equal(
+    afterQuietHours("2026-09-22T22:30:00Z", preferences),
+    "2026-09-23T07:15:00.000Z",
+  );
+  assert.equal(
+    afterQuietHours("2026-09-23T07:14:00Z", preferences),
+    "2026-09-23T07:15:00.000Z",
+  );
+  assert.equal(
+    afterQuietHours("2026-09-23T07:15:00Z", preferences),
+    "2026-09-23T07:15:00Z",
+  );
+});

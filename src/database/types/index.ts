@@ -648,18 +648,21 @@ export type Database = {
       };
       spaces: {
         Row: {
+          color: string;
           created_at: string;
           id: string;
           name: string;
           owner_id: string;
         };
         Insert: {
+          color?: string;
           created_at?: string;
           id?: string;
           name: string;
           owner_id: string;
         };
         Update: {
+          color?: string;
           created_at?: string;
           id?: string;
           name?: string;
@@ -749,21 +752,39 @@ export type Database = {
           reset_at: string;
         }[];
       };
-      create_space: {
-        Args: { p_name: string };
-        Returns: {
-          created_at: string;
-          id: string;
-          name: string;
-          owner_id: string;
-        };
-        SetofOptions: {
-          from: "*";
-          to: "spaces";
-          isOneToOne: true;
-          isSetofReturn: false;
-        };
-      };
+      create_space:
+        | {
+            Args: { p_name: string };
+            Returns: {
+              color: string;
+              created_at: string;
+              id: string;
+              name: string;
+              owner_id: string;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "spaces";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          }
+        | {
+            Args: { p_color: string; p_name: string };
+            Returns: {
+              color: string;
+              created_at: string;
+              id: string;
+              name: string;
+              owner_id: string;
+            };
+            SetofOptions: {
+              from: "*";
+              to: "spaces";
+              isOneToOne: true;
+              isSetofReturn: false;
+            };
+          };
       delete_space: { Args: { p_space: string }; Returns: undefined };
       due_recurrences: {
         Args: never;

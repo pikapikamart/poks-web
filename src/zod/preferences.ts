@@ -4,7 +4,9 @@ import { zoneSchema } from "@/zod/common";
 export const preferencesSchema = z.object({
   timeZone: zoneSchema,
   quietStart: z.number().int().min(0).max(23).nullable(),
+  quietStartMinute: z.number().int().min(0).max(59).optional(),
   quietEnd: z.number().int().min(0).max(23).nullable(),
+  quietEndMinute: z.number().int().min(0).max(59).optional(),
   intensity: z.enum(["subtle", "normal"]),
   snoozeMinutes: z.number().int().min(1).max(1440),
   repeatMinutes: z.number().int().min(0).max(1440),
