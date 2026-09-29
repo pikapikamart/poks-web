@@ -871,6 +871,22 @@ export type Database = {
         Args: { p_content: Json; p_parent: string; p_revision: number };
         Returns: string;
       };
+      update_space: {
+        Args: { p_color: string; p_name: string; p_space: string };
+        Returns: {
+          color: string;
+          created_at: string;
+          id: string;
+          name: string;
+          owner_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "spaces";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
     };
     Enums: {
       [_ in never]: never;
