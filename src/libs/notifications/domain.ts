@@ -24,9 +24,13 @@ export const scheduleFor = (
   }
 
   const main = afterQuietHours(due, prefs);
-  const jobs = [{ kind: "due", due_at: main }];
+  const missed = new Date(Date.parse(main) + 3 * 60_000).toISOString();
+  const jobs = [
+    { kind: "due", due_at: main },
+    { kind: "missed", due_at: missed },
+  ];
 
-  const used = new Set([Date.parse(main)]);
+  const used = new Set([Date.parse(main), Date.parse(missed)]);
 
   const nudge = DateTime.fromISO(due)
     .minus({ minutes: record.content.nudgeMinutes })

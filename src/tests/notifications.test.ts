@@ -122,7 +122,13 @@ test("undated and completed records stay quiet; quiet hours do not stack nudges 
 
   assert.equal(jobs[0].due_at, "2026-09-24T07:00:00.000Z");
   assert.ok(!jobs.some((j) => j.kind === "nudge"));
-  assert.equal(jobs.length, 1);
+  assert.deepEqual(
+    jobs.map((job) => [job.kind, job.due_at]),
+    [
+      ["due", "2026-09-24T07:00:00.000Z"],
+      ["missed", "2026-09-24T07:03:00.000Z"],
+    ],
+  );
   assert.equal(new Set(jobs.map((j) => j.due_at)).size, jobs.length);
   record.content.completed = true;
   assert.deepEqual(scheduleFor(record, defaultPreferences, 0), []);

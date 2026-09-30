@@ -302,8 +302,24 @@ export const sendDueNotifications = async () => {
         (record
           ? job.kind === "nudge"
             ? `Coming up: ${record.content.title}`
-            : record.content.title
+            : job.kind === "missed"
+              ? `Reminder not completed: ${record.content.title}`
+              : record.content.title
           : "A Space you shared has changed.");
+
+      if (record && job.kind === "missed") {
+        checked(
+          await db.from("notification_inbox").upsert(
+            {
+              user_id: job.user_id,
+              reminder_id: record.id,
+              body,
+              event_key: `missed:${record.id}:${job.revision}:${job.user_id}`,
+            },
+            { onConflict: "event_key", ignoreDuplicates: true },
+          ),
+        );
+      }
 
       const devices =
         checked(
@@ -406,20 +422,27 @@ export const sendDueNotifications = async () => {
               ? "Space update"
               : job.kind === "nudge"
                 ? "A little nudge"
-                : "Pox remembers",
+                : job.kind === "missed"
+                  ? "Reminder not completed"
+                  : "Pox remembers",
             body,
             data: {
               recordId: record?.id,
               eventId: job.id,
               revision: job.revision,
+              kind: job.kind,
             },
-            categoryId:
-              record && !job.kind.startsWith("activity:")
-                ? "memory"
-                : undefined,
+            ...(record && job.kind === "due" ? { categoryId: "memory" } : {}),
             channelId: job.kind === "nudge" ? "gentle-v3" : "reminders-v3",
             sound: "default",
             priority: job.kind === "nudge" ? "normal" : "high",
+            ...(record && ["due", "missed"].includes(job.kind)
+              ? {
+                collapseId: `reminder-${record.id}`,
+                tag: `reminder-${record.id}`,
+              }
+              : {}),
+            ...(job.kind === "due" ? { ttl: 180 } : {}),
           });
 
           return pushTicketResponseSchema.parse(value).data;
