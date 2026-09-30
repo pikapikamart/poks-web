@@ -140,37 +140,65 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       );
     },
   );
-  await t.test("only the owner can edit a Space", async () => {
-    const created = await db.query<{ id: string }>(
-      "select (create_space('  Family  ')).id",
-    );
-    const spaceId = created.rows[0].id;
-    const updated = await db.query<{ name: string; color: string }>(
-      "select (updated).* from (select update_space($1,$2,$3) as updated) s",
-      [spaceId, "  Friends  ", "#DFF2EF"],
-    );
-
-    assert.equal(updated.rows[0].name, "Friends");
-    assert.equal(updated.rows[0].color, "#DFF2EF");
-    await assert.rejects(
-      db.query("select update_space($1,$2,$3)", [spaceId, "", "#E7F1E9"]),
-      /INVALID_SPACE/,
-    );
-
-    try {
-      await asUser(db, bob);
-      await assert.rejects(
-        db.query("select update_space($1,$2,$3)", [
-          spaceId,
-          "Hijacked",
-          "#F4ECE0",
-        ]),
-        /SPACE_NOT_FOUND/,
+  await t.test(
+    "owners and editors can update a Space but viewers cannot",
+    async () => {
+      const created = await db.query<{ id: string }>(
+        "select (create_space('  Family  ')).id",
       );
-    } finally {
+      const spaceId = created.rows[0].id;
+      const updated = await db.query<{ name: string; color: string }>(
+        "select (updated).* from (select update_space($1,$2,$3) as updated) s",
+        [spaceId, "  Friends  ", "#DFF2EF"],
+      );
+
+      assert.equal(updated.rows[0].name, "Friends");
+      assert.equal(updated.rows[0].color, "#DFF2EF");
+      await assert.rejects(
+        db.query("select update_space($1,$2,$3)", [spaceId, "", "#E7F1E9"]),
+        /INVALID_SPACE/,
+      );
+
+      await asAdmin(db);
+      await db.query(
+        "insert into space_members(space_id,user_id,role) values($1,$2,'editor')",
+        [spaceId, bob],
+      );
       await asUser(db, alice);
-    }
-  });
+
+      try {
+        await asUser(db, bob);
+        const editorUpdate = await db.query<{ name: string; color: string }>(
+          "select (updated).* from (select update_space($1,$2,$3) as updated) s",
+          [spaceId, "Edited together", "#E7F1E9"],
+        );
+
+        assert.equal(editorUpdate.rows[0].name, "Edited together");
+        assert.equal(editorUpdate.rows[0].color, "#E7F1E9");
+        await assert.rejects(
+          db.query("select delete_space($1)", [spaceId]),
+          /FORBIDDEN/,
+        );
+        await asUser(db, alice);
+        await db.query("select manage_member($1,$2,$3)", [
+          spaceId,
+          bob,
+          "viewer",
+        ]);
+        await asUser(db, bob);
+        await assert.rejects(
+          db.query("select update_space($1,$2,$3)", [
+            spaceId,
+            "Hijacked",
+            "#F4ECE0",
+          ]),
+          /SPACE_NOT_FOUND/,
+        );
+      } finally {
+        await asUser(db, alice);
+      }
+    },
+  );
   const r = record("Review me");
   await save(r);
   await t.test("record kind cannot bypass structured completion", async () => {
