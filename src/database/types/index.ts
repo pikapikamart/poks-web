@@ -858,6 +858,24 @@ export type Database = {
       };
       reschedule_user: { Args: { p_user: string }; Returns: undefined };
       revoke_invite: { Args: { p_id: string }; Returns: undefined };
+      rotate_space_link: {
+        Args: { p_role: string; p_space: string };
+        Returns: {
+          accepted_by: string | null;
+          expires_at: string;
+          id: string;
+          revoked: boolean;
+          role: string;
+          space_id: string;
+          token: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "invitations";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       save_record: {
         Args: { p_expected: number; p_operation: string; p_record: Json };
         Returns: Json;

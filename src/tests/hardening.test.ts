@@ -147,11 +147,11 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     const spaceId = created.rows[0].id;
     const updated = await db.query<{ name: string; color: string }>(
       "select (updated).* from (select update_space($1,$2,$3) as updated) s",
-      [spaceId, "  Friends  ", "#E7F1E9"],
+      [spaceId, "  Friends  ", "#DFF2EF"],
     );
 
     assert.equal(updated.rows[0].name, "Friends");
-    assert.equal(updated.rows[0].color, "#E7F1E9");
+    assert.equal(updated.rows[0].color, "#DFF2EF");
     await assert.rejects(
       db.query("select update_space($1,$2,$3)", [spaceId, "", "#E7F1E9"]),
       /INVALID_SPACE/,
@@ -312,6 +312,83 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       );
       assert.equal(member.rows[0].role, "editor");
       await asUser(db);
+    },
+  );
+  await t.test(
+    "each Space has two links and rotation revokes only one",
+    async () => {
+      const before = await db.query<{ role: string; token: string }>(
+        "select role,token from invitations where space_id=$1 and not revoked order by role",
+        [space],
+      );
+      assert.deepEqual(
+        before.rows.map((link) => link.role),
+        ["editor", "viewer"],
+      );
+
+      const oldViewer = before.rows[1].token;
+      const newViewer = (
+        await db.query<{ token: string }>(
+          "select (rotate_space_link($1,'viewer')).token",
+          [space],
+        )
+      ).rows[0].token;
+
+      assert.notEqual(newViewer, oldViewer);
+      assert.equal(
+        (
+          await db.query<{ token: string }>(
+            "select (invite($1,'editor')).token",
+            [space],
+          )
+        ).rows[0].token,
+        token,
+      );
+      await asUser(db, bob);
+
+      try {
+        await assert.rejects(
+          db.query("select rotate_space_link($1,'viewer')", [space]),
+          /FORBIDDEN/,
+        );
+      } finally {
+        await asUser(db);
+      }
+
+      await assert.rejects(
+        db.query("select inspect_invite($1)", [oldViewer]),
+        /INVITATION_UNAVAILABLE/,
+      );
+      assert.equal(
+        (
+          await db.query<{ token: string }>(
+            "select (invite($1,'viewer')).token",
+            [space],
+          )
+        ).rows[0].token,
+        newViewer,
+      );
+
+      const currentViewer = await db.query<{ id: string }>(
+        "select id from invitations where space_id=$1 and role='viewer' and not revoked",
+        [space],
+      );
+      await db.query("select revoke_invite($1)", [currentViewer.rows[0].id]);
+      const replacement = await db.query<{ token: string }>(
+        "select token from invitations where space_id=$1 and role='viewer' and not revoked",
+        [space],
+      );
+      assert.equal(replacement.rows.length, 1);
+      assert.notEqual(replacement.rows[0].token, newViewer);
+      assert.equal(
+        (
+          await db.query<{ token: string }>(
+            "select (invite($1,'editor')).token",
+            [space],
+          )
+        ).rows[0].token,
+        token,
+      );
     },
   );
   await t.test(
