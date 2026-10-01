@@ -12,6 +12,7 @@ import {
   defaultDatedReminderTimes,
   fillNewReminderNotes,
   normalizeProposal,
+  removeUnrequestedReminderSteps,
   correctTomorrowReminderDate,
 } from "@/libs/ai/domain";
 
@@ -48,6 +49,7 @@ const buildInterpretInstructions = (
     `The reference time in ${timeZone} is ${localNow.toFormat("yyyy-MM-dd HH:mm ZZZZ")}. Today is ${localNow.toISODate()} and tomorrow is ${localNow.plus({ days: 1 }).toISODate()} in that time zone. Resolve relative dates against this local calendar, not the UTC date.`,
     "Use referenceTime and timeZone. When the user says tomorrow, never schedule the reminder for today's local date.",
     "Context definitions are reusable; their executions have recordKind instance and templateId.",
+    "A normal reminder for one action must have an empty items array. Never repeat the reminder action as a checklist step. Add items only when the user explicitly asks for a checklist, steps, subtasks, or task list.",
     "Required steps determine completion.",
     "Never change sharing on an existing record.",
     "Use existing groups only; ask for group creation if needed.",
@@ -123,7 +125,11 @@ export const interpretThought = async (
   }
 
   const proposal = normalizeProposal(raw, records);
-  const withNotes = fillNewReminderNotes(proposal, input.text);
+  const withoutInventedSteps = removeUnrequestedReminderSteps(
+    proposal,
+    input.text,
+  );
+  const withNotes = fillNewReminderNotes(withoutInventedSteps, input.text);
   const withCorrectedDate = correctTomorrowReminderDate(
     withNotes,
     input.text,

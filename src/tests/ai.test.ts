@@ -12,6 +12,7 @@ import {
   defaultDatedReminderTimes,
   fillNewReminderNotes,
   correctTomorrowReminderDate,
+  removeUnrequestedReminderSteps,
 } from "@/libs/ai/domain";
 
 const user = crypto.randomUUID();
@@ -290,6 +291,48 @@ test("a single recorded reminder keeps AI notes or falls back to the user's word
       thought,
     ).actions[0].content.notes,
     "Settle the Converge internet plan payment.",
+  );
+});
+
+test("a single reminder action does not become a duplicate checklist step", () => {
+  const item = {
+    id: crypto.randomUUID(),
+    title: "Remove my GitHub credentials",
+    required: true,
+    completed: false,
+    assignee: null,
+    instructions: "",
+  };
+  const action: Proposal["actions"][number] = {
+    kind: "create",
+    targetId: null,
+    recordKind: "reminder",
+    spaceId: null,
+    content: {
+      ...blankContent("Asia/Manila"),
+      title: "Remove my GitHub credentials",
+      dueAt: "2026-10-01T20:30:00+08:00",
+      items: [item],
+    },
+  };
+  const proposal: Proposal = {
+    summary: "Create reminder",
+    question: null,
+    actions: [action],
+  };
+  const thought =
+    "Remind me at 8:30 p.m. today that I will need to remove my GitHub credentials.";
+
+  assert.deepEqual(
+    removeUnrequestedReminderSteps(proposal, thought).actions[0].content.items,
+    [],
+  );
+  assert.deepEqual(
+    removeUnrequestedReminderSteps(
+      proposal,
+      "Create a checklist with steps to remove my GitHub credentials",
+    ).actions[0].content.items,
+    [item],
   );
 });
 

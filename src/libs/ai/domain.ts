@@ -109,6 +109,31 @@ export const fillNewReminderNotes = (
   };
 };
 
+const requestsChecklist = (thought: string) =>
+  /\b(checklist|check list|steps?|subtasks?|to[- ]do list|task list)\b/i.test(
+    thought,
+  );
+
+export const removeUnrequestedReminderSteps = (
+  proposal: Proposal,
+  thought: string,
+): Proposal => {
+  if (requestsChecklist(thought)) {
+    return proposal;
+  }
+
+  return {
+    ...proposal,
+    actions: proposal.actions.map((action) =>
+      action.kind === "create" &&
+      action.recordKind === "reminder" &&
+      !action.content.templateId
+        ? { ...action, content: { ...action.content, items: [] } }
+        : action,
+    ),
+  };
+};
+
 export const correctTomorrowReminderDate = (
   proposal: Proposal,
   thought: string,
