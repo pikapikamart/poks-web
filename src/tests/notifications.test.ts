@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blankContent } from "@/libs/records";
+import { blankContent } from "@/libs/entries";
 import { defaultPreferences } from "@/libs/preferences";
-import { type PoxRecord } from "@/zod/records";
+import { type PoxEntry } from "@/zod/entries";
 import {
   deliverToDevices,
   receiptOutcome,
@@ -99,8 +99,8 @@ test("invalid tokens are retired and receipts expire instead of polling forever"
   assert.equal(receiptOutcome(undefined, 0, 86_400_000), "expired");
   assert.equal(receiptOutcome({ status: "ok" }, 0, 100), "delivered");
 });
-test("undated and completed records stay quiet; quiet hours do not stack nudges with reminders", () => {
-  const record: PoxRecord = {
+test("undated and completed entries stay quiet; quiet hours do not stack nudges with reminders", () => {
+  const entry: PoxEntry = {
     id: crypto.randomUUID(),
     owner_id: crypto.randomUUID(),
     space_id: null,
@@ -111,11 +111,11 @@ test("undated and completed records stay quiet; quiet hours do not stack nudges 
     content: { ...blankContent(), title: "Remember" },
   };
 
-  assert.deepEqual(scheduleFor(record, defaultPreferences, 0), []);
-  record.content.dueAt = "2026-09-23T23:00:00Z";
+  assert.deepEqual(scheduleFor(entry, defaultPreferences, 0), []);
+  entry.content.dueAt = "2026-09-23T23:00:00Z";
 
   const jobs = scheduleFor(
-    record,
+    entry,
     { ...defaultPreferences, quietStart: 22, quietEnd: 7, repeatMinutes: 10 },
     Date.parse("2026-09-23T20:00:00Z"),
   );
@@ -130,6 +130,6 @@ test("undated and completed records stay quiet; quiet hours do not stack nudges 
     ],
   );
   assert.equal(new Set(jobs.map((j) => j.due_at)).size, jobs.length);
-  record.content.completed = true;
-  assert.deepEqual(scheduleFor(record, defaultPreferences, 0), []);
+  entry.content.completed = true;
+  assert.deepEqual(scheduleFor(entry, defaultPreferences, 0), []);
 });

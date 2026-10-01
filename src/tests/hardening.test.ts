@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blankContent } from "@/libs/records";
+import { blankContent } from "@/libs/entries";
 import { defaultPreferences } from "@/libs/preferences";
 import { database, asUser, asAdmin, alice, bob } from "./helpers/database";
 
@@ -8,7 +8,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
   const db = await database();
   t.after(() => db.close());
 
-  const record = (title = "Memory") => ({
+  const entry = (title = "Memory") => ({
     id: crypto.randomUUID(),
     owner_id: alice,
     space_id: null as string | null,
@@ -17,9 +17,9 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     deleted: false,
   });
 
-  const save = (r: ReturnType<typeof record>, version = 0) =>
+  const save = (r: ReturnType<typeof entry>, version = 0) =>
     db.query<{ result: { version: number; content: unknown } }>(
-      "select save_record($1,$2,$3) as result",
+      "select save_entry($1,$2,$3) as result",
       [crypto.randomUUID(), JSON.stringify(r), version],
     );
 
@@ -28,7 +28,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     async () => {
       for (const role of ["anon", "authenticated"]) {
         for (const fn of [
-          "save_record_internal(uuid,jsonb,integer)",
+          "save_entry_internal(uuid,jsonb,integer)",
           "cleanup_account(uuid)",
           "check_ai_sources(jsonb)",
           "reschedule_user(uuid)",
@@ -119,15 +119,15 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
         { archived: null },
         { items: [{ id: crypto.randomUUID(), title: "Missing flags" }] },
       ]) {
-        const r = record();
+        const r = entry();
         Object.assign(r.content, bad);
         await assert.rejects(save(r));
       }
 
       await assert.rejects(
-        db.query("select save_record($1,$2,null)", [
+        db.query("select save_entry($1,$2,null)", [
           crypto.randomUUID(),
-          JSON.stringify(record()),
+          JSON.stringify(entry()),
         ]),
         /INVALID_OPERATION/,
       );
@@ -199,9 +199,9 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       }
     },
   );
-  const r = record("Review me");
+  const r = entry("Review me");
   await save(r);
-  await t.test("record kind cannot bypass structured completion", async () => {
+  await t.test("entry kind cannot bypass structured completion", async () => {
     await assert.rejects(
       save({ ...r, kind: "context" }, 1),
       /INVALID_KIND_CHANGE/,
@@ -217,11 +217,11 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
       instructions: "",
     };
     const context = {
-      ...record("Reusable steps"),
+      ...entry("Reusable steps"),
       kind: "context",
       content: { ...blankContent(), title: "Reusable steps", items: [step] },
     };
-    const reminder = record("Use those steps");
+    const reminder = entry("Use those steps");
 
     await save(context);
     await save(reminder);
@@ -265,12 +265,12 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
   const action = {
     operationId: crypto.randomUUID(),
     expectedVersion: 1,
-    record: { ...r, content: { ...r.content, title: "Reviewed change" } },
+    entry: { ...r, content: { ...r.content, title: "Reviewed change" } },
   };
 
   const applyOperation = (req = request, payload = body, actions = [action]) =>
-    db.query<{ records: unknown }>(
-      "select apply_ai_operation($1,$2,$3,$4,$5) as records",
+    db.query<{ entries: unknown }>(
+      "select apply_ai_operation($1,$2,$3,$4,$5) as entries",
       [
         req,
         JSON.stringify(payload),
@@ -294,18 +294,18 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
   await t.test("AI operation rejects stale source versions", async () => {
     await assert.rejects(applyOperation(crypto.randomUUID()), /CONFLICT/);
   });
-  await t.test("AI operation applies multiple records atomically", async () => {
-    const first = record("First");
-    const second = record("Invalid second");
+  await t.test("AI operation applies multiple entries atomically", async () => {
+    const first = entry("First");
+    const second = entry("Invalid second");
 
     const actions = [first, second].map((rec) => ({
       operationId: crypto.randomUUID(),
       expectedVersion: 0,
-      record: rec,
+      entry: rec,
     }));
 
     const invalid = JSON.parse(JSON.stringify(actions));
-    invalid[1].record.content.recurrence = null;
+    invalid[1].entry.content.recurrence = null;
     await assert.rejects(applyOperation(crypto.randomUUID(), body, invalid));
     assert.equal(
       (await db.query("select id from reminders where id=$1", [first.id])).rows
@@ -592,7 +592,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
   await t.test(
     "reminder_recurrences create independent instances and preserve the calendar anchor",
     async () => {
-      const recurring = record("Monthly responsibility");
+      const recurring = entry("Monthly responsibility");
       recurring.content = {
         ...recurring.content,
         dueDate: "2026-01-31",
@@ -644,7 +644,7 @@ test("database validation, grants, AI concurrency, leases and deletion recovery"
     async () => {
       await db.query("select prepare_account_deletion()");
       await db.query("select prepare_account_deletion()");
-      await assert.rejects(save(record()), /DELETING/);
+      await assert.rejects(save(entry()), /DELETING/);
       await assert.rejects(
         db.query("select create_space('Race')"),
         /ACCOUNT_DELETING/,

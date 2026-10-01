@@ -254,7 +254,7 @@ test("all protected routes rate limit before reading input or changing data", as
 
   assert.ok(rates.every((rate) => rate.p_limit === 60));
 });
-test("process route validates text and retrieves relevant records", async (t) => {
+test("process route validates text and retrieves relevant entries", async (t) => {
   const calls = serviceMock(t);
   assert.equal((await processThought(request("{"))).status, 400);
   assert.equal((await processThought(request("{}", "text/plain"))).status, 415);

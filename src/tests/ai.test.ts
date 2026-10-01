@@ -2,8 +2,8 @@ import { modelProposalSchema } from "@/zod/ai";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { zodTextFormat } from "openai/helpers/zod";
-import { blankContent } from "@/libs/records";
-import { type PoxRecord } from "@/zod/records";
+import { blankContent } from "@/libs/entries";
+import { type PoxEntry } from "@/zod/entries";
 import { type Proposal } from "@/zod/ai";
 import {
   normalizeProposal,
@@ -16,16 +16,16 @@ import {
 } from "@/libs/ai/domain";
 
 const user = crypto.randomUUID();
-test("retrieval budgets preserve whole records rather than truncate authoritative fields", () => {
-  const first = record();
-  const second = record();
+test("retrieval budgets preserve whole entries rather than truncate authoritative fields", () => {
+  const first = entry();
+  const second = entry();
 
   const limit = Buffer.byteLength(JSON.stringify(first));
   assert.deepEqual(boundedSources([first, second], limit), [first]);
   assert.equal(first.content.notes, "Keep these instructions");
 });
 
-const record = (kind: PoxRecord["kind"] = "reminder"): PoxRecord => {
+const entry = (kind: PoxEntry["kind"] = "reminder"): PoxEntry => {
   return {
     id: crypto.randomUUID(),
     owner_id: user,
@@ -56,7 +56,7 @@ test("clarification never produces mutations and invented targets are rejected",
     ).actions,
     [],
   );
-  const r = record();
+  const r = entry();
   assert.throws(
     () =>
       normalizeProposal(
@@ -67,7 +67,7 @@ test("clarification never produces mutations and invented targets are rejected",
             {
               kind: "update",
               targetId: r.id,
-              recordKind: "reminder",
+              entryKind: "reminder",
               spaceId: null,
               content: r.content,
             },
@@ -79,7 +79,7 @@ test("clarification never produces mutations and invented targets are rejected",
   );
 });
 test("Context instances copy the user's definition and receive fresh step identifiers", () => {
-  const template = record("context");
+  const template = entry("context");
   template.content.items = [
     {
       id: crypto.randomUUID(),
@@ -99,7 +99,7 @@ test("Context instances copy the user's definition and receive fresh step identi
         {
           kind: "create",
           targetId: null,
-          recordKind: "instance",
+          entryKind: "instance",
           spaceId: null,
           content: {
             ...blankContent(),
@@ -119,7 +119,7 @@ test("Context instances copy the user's definition and receive fresh step identi
   assert.notEqual(item.id, template.content.items[0].id);
 });
 test("AI actions preserve source fields and reject stale source or template versions", () => {
-  const source = record();
+  const source = entry();
 
   const proposal: Proposal = {
     summary: "Change title",
@@ -128,7 +128,7 @@ test("AI actions preserve source fields and reject stale source or template vers
       {
         kind: "update",
         targetId: source.id,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: { ...source.content, title: "Changed" },
       },
@@ -137,17 +137,17 @@ test("AI actions preserve source fields and reject stale source or template vers
 
   const result = buildActions(proposal, [source], [source], user);
   assert.equal(result[0].expectedVersion, 3);
-  assert.equal(result[0].record.content.notes, source.content.notes);
+  assert.equal(result[0].entry.content.notes, source.content.notes);
   assert.throws(
     () => buildActions(proposal, [source], [{ ...source, version: 4 }], user),
     /changed/,
   );
-  const template = record("context");
+  const template = entry("context");
   proposal.actions = [
     {
       kind: "create",
       targetId: null,
-      recordKind: "instance",
+      entryKind: "instance",
       spaceId: null,
       content: { ...source.content, templateId: template.id },
     },
@@ -167,7 +167,7 @@ test("a date-only spoken reminder is scheduled for 9 AM in the user's time zone"
       {
         kind: "create",
         targetId: null,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: {
           ...blankContent("Asia/Manila"),
@@ -179,7 +179,7 @@ test("a date-only spoken reminder is scheduled for 9 AM in the user's time zone"
   };
 
   const scheduled = defaultDatedReminderTimes(proposal, [], "Asia/Manila");
-  const saved = buildActions(scheduled, [], [], user)[0].record.content;
+  const saved = buildActions(scheduled, [], [], user)[0].entry.content;
 
   assert.equal(saved.dueAt, "2026-09-29T09:00:00+08:00");
   assert.equal(saved.dueDate, null);
@@ -189,7 +189,7 @@ test("tomorrow at 7 PM uses the next local day when the model picks today", () =
   const action: Proposal["actions"][number] = {
     kind: "create",
     targetId: null,
-    recordKind: "reminder",
+    entryKind: "reminder",
     spaceId: null,
     content: {
       ...blankContent("Asia/Manila"),
@@ -222,7 +222,7 @@ test("tomorrow correction follows the user's local date across UTC midnight", ()
       {
         kind: "create",
         targetId: null,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: { ...blankContent("Asia/Manila"), dueDate: "2026-09-28" },
       },
@@ -259,7 +259,7 @@ test("a single recorded reminder keeps AI notes or falls back to the user's word
   const action: Proposal["actions"][number] = {
     kind: "create",
     targetId: null,
-    recordKind: "reminder",
+    entryKind: "reminder",
     spaceId: null,
     content: { ...blankContent(), title: "Pay internet bill" },
   };
@@ -271,7 +271,7 @@ test("a single recorded reminder keeps AI notes or falls back to the user's word
   const thought = "Pay the Converge internet plan on September twenty-nine";
 
   const fallback = fillNewReminderNotes(proposal, thought);
-  const saved = buildActions(fallback, [], [], user)[0].record.content;
+  const saved = buildActions(fallback, [], [], user)[0].entry.content;
 
   assert.equal(saved.notes, thought);
   assert.equal(
@@ -306,7 +306,7 @@ test("a single reminder action does not become a duplicate checklist step", () =
   const action: Proposal["actions"][number] = {
     kind: "create",
     targetId: null,
-    recordKind: "reminder",
+    entryKind: "reminder",
     spaceId: null,
     content: {
       ...blankContent("Asia/Manila"),
@@ -337,11 +337,11 @@ test("a single reminder action does not become a duplicate checklist step", () =
 });
 
 test("notes fallback does not attach one thought to multiple reminders or overwrite updates", () => {
-  const existing = record();
+  const existing = entry();
   const action: Proposal["actions"][number] = {
     kind: "create",
     targetId: null,
-    recordKind: "reminder",
+    entryKind: "reminder",
     spaceId: null,
     content: { ...blankContent(), title: "First" },
   };
@@ -360,7 +360,7 @@ test("notes fallback does not attach one thought to multiple reminders or overwr
       {
         kind: "update",
         targetId: existing.id,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: existing.content,
       },
@@ -378,7 +378,7 @@ test("notes fallback does not attach one thought to multiple reminders or overwr
 });
 
 test("the 9 AM default respects daylight saving time and existing scheduling choices", () => {
-  const existing = record();
+  const existing = entry();
   existing.content.dueDate = "2026-11-01";
   const dateOnly = {
     ...blankContent("America/New_York"),
@@ -395,35 +395,35 @@ test("the 9 AM default respects daylight saving time and existing scheduling cho
       {
         kind: "create",
         targetId: null,
-        recordKind: "instance",
+        entryKind: "instance",
         spaceId: null,
         content: dateOnly,
       },
       {
         kind: "create",
         targetId: null,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: precise,
       },
       {
         kind: "create",
         targetId: null,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: blankContent(),
       },
       {
         kind: "update",
         targetId: existing.id,
-        recordKind: "reminder",
+        entryKind: "reminder",
         spaceId: null,
         content: existing.content,
       },
       {
         kind: "create",
         targetId: null,
-        recordKind: "context",
+        entryKind: "context",
         spaceId: null,
         content: dateOnly,
       },

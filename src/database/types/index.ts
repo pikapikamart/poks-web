@@ -579,7 +579,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "records_space_id_fkey";
+            foreignKeyName: "reminders_space_id_fkey";
             columns: ["space_id"];
             isOneToOne: false;
             referencedRelation: "spaces";
@@ -691,20 +691,12 @@ export type Database = {
         Args: { c: Database["public"]["Tables"]["contexts"]["Row"] };
         Returns: boolean;
       };
-      can_edit_record: {
-        Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
-        Returns: boolean;
-      };
       can_edit_reminder: {
         Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
         Returns: boolean;
       };
       can_read_context: {
         Args: { c: Database["public"]["Tables"]["contexts"]["Row"] };
-        Returns: boolean;
-      };
-      can_read_record: {
-        Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
         Returns: boolean;
       };
       can_read_reminder: {
@@ -843,7 +835,7 @@ export type Database = {
         Returns: undefined;
       };
       post_note: {
-        Args: { p_body: string; p_record: string };
+        Args: { p_body: string; p_reminder: string };
         Returns: undefined;
       };
       prepare_account_deletion: { Args: never; Returns: undefined };
@@ -876,12 +868,12 @@ export type Database = {
           isSetofReturn: false;
         };
       };
-      save_record: {
-        Args: { p_expected: number; p_operation: string; p_record: Json };
+      save_entry: {
+        Args: { p_expected: number; p_operation: string; p_entry: Json };
         Returns: Json;
       };
-      save_record_internal: {
-        Args: { p_expected: number; p_operation: string; p_record: Json };
+      save_entry_internal: {
+        Args: { p_expected: number; p_operation: string; p_entry: Json };
         Returns: Json;
       };
       space_role: { Args: { s: string }; Returns: string };

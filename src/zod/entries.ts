@@ -33,7 +33,7 @@ export const contentSchema = z
   );
 export type Content = z.infer<typeof contentSchema>;
 export type Item = z.infer<typeof itemSchema>;
-export const recordSchema = z.object({
+export const entrySchema = z.object({
   id: uuid,
   owner_id: uuid,
   space_id: uuid.nullable(),
@@ -43,10 +43,10 @@ export const recordSchema = z.object({
   updated_at: z.string(),
   deleted: z.boolean(),
 });
-export type PoxRecord = z.infer<typeof recordSchema>;
+export type PoxEntry = z.infer<typeof entrySchema>;
 export const mutationSchema = z.object({
   operationId: uuid,
-  record: recordSchema,
+  entry: entrySchema,
   expectedVersion: z.number().int().nonnegative(),
 });
 export type Mutation = z.infer<typeof mutationSchema>;

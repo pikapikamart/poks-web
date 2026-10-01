@@ -1,15 +1,15 @@
 import type { z } from "zod";
 import { DateTime } from "luxon";
 import { modelProposalSchema } from "@/zod/ai";
-import { contentSchema, type PoxRecord, type Mutation } from "@/zod/records";
+import { contentSchema, type PoxEntry, type Mutation } from "@/zod/entries";
 import { proposalSchema, type Proposal } from "@/zod/ai";
 import { HttpError } from "@/libs/http";
 
-export const boundedSources = (records: PoxRecord[], limit = 80_000) => {
+export const boundedSources = (entries: PoxEntry[], limit = 80_000) => {
   let used = 0;
 
-  return records.filter((record) => {
-    const size = Buffer.byteLength(JSON.stringify(record));
+  return entries.filter((entry) => {
+    const size = Buffer.byteLength(JSON.stringify(entry));
 
     if (used + size > limit) {
       return false;
@@ -23,7 +23,7 @@ export const boundedSources = (records: PoxRecord[], limit = 80_000) => {
 
 export const normalizeProposal = (
   raw: z.infer<typeof modelProposalSchema>,
-  records: PoxRecord[],
+  entries: PoxEntry[],
 ): Proposal => {
   if (raw.question) {
     return proposalSchema.parse({ ...raw, actions: [] });
@@ -32,11 +32,11 @@ export const normalizeProposal = (
   return proposalSchema.parse({
     ...raw,
     actions: raw.actions.map((a) => {
-      const source = records.find((r) => r.id === a.targetId);
+      const source = entries.find((r) => r.id === a.targetId);
 
       if (
         a.kind === "update" &&
-        (!source || source.deleted || source.kind !== a.recordKind)
+        (!source || source.deleted || source.kind !== a.entryKind)
       ) {
         throw new HttpError(
           422,
@@ -52,11 +52,11 @@ export const normalizeProposal = (
       }));
 
       if (a.kind === "create" && a.content.templateId) {
-        const template = records.find(
+        const template = entries.find(
           (r) => r.id === a.content.templateId && r.kind === "context",
         );
 
-        if (!template || a.recordKind !== "instance") {
+        if (!template || a.entryKind !== "instance") {
           throw new HttpError(
             422,
             "Choose an available Context.",
@@ -92,7 +92,7 @@ export const fillNewReminderNotes = (
 
   if (
     action.kind !== "create" ||
-    action.recordKind === "context" ||
+    action.entryKind === "context" ||
     action.content.notes.trim()
   ) {
     return proposal;
@@ -126,7 +126,7 @@ export const removeUnrequestedReminderSteps = (
     ...proposal,
     actions: proposal.actions.map((action) =>
       action.kind === "create" &&
-      action.recordKind === "reminder" &&
+      action.entryKind === "reminder" &&
       !action.content.templateId
         ? { ...action, content: { ...action.content, items: [] } }
         : action,
@@ -151,7 +151,7 @@ export const correctTomorrowReminderDate = (
 
   const action = proposal.actions[0];
 
-  if (action.kind !== "create" || action.recordKind === "context") {
+  if (action.kind !== "create" || action.entryKind === "context") {
     return proposal;
   }
 
@@ -213,17 +213,17 @@ export const correctTomorrowReminderDate = (
 
 export const defaultDatedReminderTimes = (
   proposal: Proposal,
-  records: PoxRecord[],
+  entries: PoxEntry[],
   timeZone: string,
 ): Proposal => {
   return {
     ...proposal,
     actions: proposal.actions.map((action) => {
-      if (action.recordKind === "context" || !action.content.dueDate) {
+      if (action.entryKind === "context" || !action.content.dueDate) {
         return action;
       }
 
-      const source = records.find((record) => record.id === action.targetId);
+      const source = entries.find((entry) => entry.id === action.targetId);
 
       if (
         action.kind === "update" &&
@@ -261,8 +261,8 @@ export const defaultDatedReminderTimes = (
 
 export const buildActions = (
   proposal: Proposal,
-  sources: PoxRecord[],
-  current: PoxRecord[],
+  sources: PoxEntry[],
+  current: PoxEntry[],
   userId: string,
 ): Mutation[] => {
   const seen = new Set<string>();
@@ -288,7 +288,7 @@ export const buildActions = (
         );
       }
 
-      if (source.kind !== a.recordKind || source.space_id !== a.spaceId) {
+      if (source.kind !== a.entryKind || source.space_id !== a.spaceId) {
         throw new HttpError(
           400,
           "Change sharing separately before using AI.",
@@ -331,11 +331,11 @@ export const buildActions = (
     return {
       operationId: crypto.randomUUID(),
       expectedVersion: source?.version ?? 0,
-      record: {
+      entry: {
         id: a.kind === "create" ? crypto.randomUUID() : source!.id,
         owner_id: source?.owner_id ?? userId,
         space_id: a.spaceId,
-        kind: a.recordKind,
+        kind: a.entryKind,
         content: contentSchema.parse(a.content),
         version: source?.version ?? 0,
         updated_at: new Date().toISOString(),

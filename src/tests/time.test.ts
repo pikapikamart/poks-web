@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blankContent, completion } from "@/libs/records";
+import { blankContent, completion } from "@/libs/entries";
 import { defaultPreferences } from "@/libs/preferences";
-import { contentSchema } from "@/zod/records";
+import { contentSchema } from "@/zod/entries";
 import { nextOccurrence, afterQuietHours, dueTime } from "@/libs/time";
 
 test("daily recurrence preserves wall time across daylight saving", () => {

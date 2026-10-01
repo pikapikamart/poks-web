@@ -3,7 +3,7 @@ import { createServerClient } from "@/supabase";
 import { checked } from "@/libs/database";
 import { databaseError } from "@/libs/http";
 import type { Proposal } from "@/zod/ai";
-import type { Mutation, PoxRecord } from "@/zod/records";
+import type { Mutation, PoxEntry } from "@/zod/entries";
 
 export const findAiOperationByRequestId = async (
   userId: string,
@@ -26,7 +26,7 @@ export const applyAiOperation = async (
   requestId: string,
   requestBody: unknown,
   proposal: Proposal,
-  sources: PoxRecord[],
+  sources: PoxEntry[],
   actions: Mutation[],
 ) => {
   const { data, error } = await db.rpc("apply_ai_operation", {

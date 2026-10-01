@@ -5,7 +5,7 @@ import {
 import { createServerClient } from "@/supabase";
 import { defaultPreferences } from "@/libs/preferences";
 import { preferencesSchema } from "@/zod/preferences";
-import { recordSchema, type PoxRecord } from "@/zod/records";
+import { entrySchema, type PoxEntry } from "@/zod/entries";
 import { afterQuietHours, dueTime, nextOccurrence } from "@/libs/time";
 import type { Delivery, DeliveryUpdate } from "@/database/types/notifications";
 import { expoRequest } from "@/libs/notifications/expo";
@@ -23,17 +23,17 @@ const checked = <T>({ data, error }: { data: T; error: unknown }): T => {
   return data;
 };
 
-const recipients = async (record: PoxRecord) => {
-  const users = record.space_id
+const recipients = async (entry: PoxEntry) => {
+  const users = entry.space_id
     ? (
       checked(
         await createServerClient()
           .from("space_members")
           .select("user_id")
-          .eq("space_id", record.space_id),
+          .eq("space_id", entry.space_id),
       ) ?? []
     ).map((r) => r.user_id)
-    : [record.owner_id];
+    : [entry.owner_id];
 
   const deleting = checked(
     await createServerClient()
@@ -95,19 +95,19 @@ export const expandOutbox = async () => {
       );
 
       if (raw) {
-        const record = recordSchema.parse(raw);
+        const entry = entrySchema.parse(raw);
 
-        if (record.version === event.revision) {
+        if (entry.version === event.revision) {
           checked(
             await db
               .from("notification_deliveries")
               .update({ status: "cancelled", claim_token: null })
-              .eq("reminder_id", record.id)
-              .neq("revision", record.version)
+              .eq("reminder_id", entry.id)
+              .neq("revision", entry.version)
               .in("status", ["pending", "sending"]),
           );
 
-          for (const user of await recipients(record)) {
+          for (const user of await recipients(entry)) {
             const prefs = await preferences(user);
             const epoch = await generation(user);
 
@@ -116,13 +116,13 @@ export const expandOutbox = async () => {
                 await db
                   .from("notification_deliveries")
                   .select("kind")
-                  .eq("reminder_id", record.id)
-                  .eq("revision", record.version)
+                  .eq("reminder_id", entry.id)
+                  .eq("revision", entry.version)
                   .eq("user_id", user)
                   .eq("status", "sent"),
               ) ?? [];
 
-            for (const job of scheduleFor(record, prefs, Date.now())) {
+            for (const job of scheduleFor(entry, prefs, Date.now())) {
               if (sent.some((s) => s.kind === job.kind)) {
                 continue;
               }
@@ -131,8 +131,8 @@ export const expandOutbox = async () => {
                 await db.from("notification_deliveries").upsert(
                   {
                     ...job,
-                    reminder_id: record.id,
-                    revision: record.version,
+                    reminder_id: entry.id,
+                    revision: entry.version,
                     user_id: user,
                     generation: epoch,
                   },
@@ -180,11 +180,11 @@ export const advanceRecurrences = async () => {
 
   for (const raw of rows ?? []) {
     try {
-      const record = recordSchema.parse(raw);
-      const next = nextOccurrence(record.content, raw.recurrence_anchor);
+      const entry = entrySchema.parse(raw);
+      const next = nextOccurrence(entry.content, raw.recurrence_anchor);
 
       if (next) {
-        const users = await recipients(record);
+        const users = await recipients(entry);
         next.items = next.items.map((i) => ({
           ...i,
           assignee:
@@ -192,8 +192,8 @@ export const advanceRecurrences = async () => {
         }));
         checked(
           await db.rpc("spawn_occurrence", {
-            p_parent: record.id,
-            p_revision: record.version,
+            p_parent: entry.id,
+            p_revision: entry.version,
             p_content: next,
           }),
         );
@@ -229,21 +229,21 @@ const eligibleRecord = async (job: Delivery) => {
       .maybeSingle(),
   );
 
-  const record = raw ? recordSchema.parse(raw) : null;
+  const entry = raw ? entrySchema.parse(raw) : null;
 
   if (
-    !record ||
-    record.version !== job.revision ||
-    record.deleted ||
-    record.content.archived ||
-    (!job.kind.startsWith("activity:") && record.content.completed) ||
-    !(await recipients(record).then((users) => users.includes(job.user_id))) ||
+    !entry ||
+    entry.version !== job.revision ||
+    entry.deleted ||
+    entry.content.archived ||
+    (!job.kind.startsWith("activity:") && entry.content.completed) ||
+    !(await recipients(entry).then((users) => users.includes(job.user_id))) ||
     (await generation(job.user_id)) !== job.generation
   ) {
     return null;
   }
 
-  return record;
+  return entry;
 };
 
 const finish = async (job: Delivery, values: DeliveryUpdate) => {
@@ -268,9 +268,9 @@ export const sendDueNotifications = async () => {
 
   for (const job of jobs ?? []) {
     try {
-      const record = await eligibleRecord(job);
+      const entry = await eligibleRecord(job);
 
-      if (record === null) {
+      if (entry === null) {
         await finish(job, { status: "cancelled" });
         continue;
       }
@@ -289,9 +289,9 @@ export const sendDueNotifications = async () => {
       }
 
       if (
-        record &&
+        entry &&
         job.kind === "nudge" &&
-        Date.parse(dueTime(record.content, prefs) ?? "1970-01-01") <= now
+        Date.parse(dueTime(entry.content, prefs) ?? "1970-01-01") <= now
       ) {
         await finish(job, { status: "cancelled" });
         continue;
@@ -299,22 +299,22 @@ export const sendDueNotifications = async () => {
 
       const body =
         job.body ??
-        (record
+        (entry
           ? job.kind === "nudge"
-            ? `Coming up: ${record.content.title}`
+            ? `Coming up: ${entry.content.title}`
             : job.kind === "missed"
-              ? `Reminder not completed: ${record.content.title}`
-              : record.content.title
+              ? `Reminder not completed: ${entry.content.title}`
+              : entry.content.title
           : "A Space you shared has changed.");
 
-      if (record && job.kind === "missed") {
+      if (entry && job.kind === "missed") {
         checked(
           await db.from("notification_inbox").upsert(
             {
               user_id: job.user_id,
-              reminder_id: record.id,
+              reminder_id: entry.id,
               body,
-              event_key: `missed:${record.id}:${job.revision}:${job.user_id}`,
+              event_key: `missed:${entry.id}:${job.revision}:${job.user_id}`,
             },
             { onConflict: "event_key", ignoreDuplicates: true },
           ),
@@ -338,12 +338,12 @@ export const sendDueNotifications = async () => {
         );
       }
 
-      const previous = record
+      const previous = entry
         ? (checked(
           await db
             .from("notification_deliveries")
             .select("id")
-            .eq("reminder_id", record.id)
+            .eq("reminder_id", entry.id)
             .eq("revision", job.revision)
             .eq("user_id", job.user_id)
             .eq("kind", job.kind)
@@ -427,19 +427,19 @@ export const sendDueNotifications = async () => {
                   : "Pox remembers",
             body,
             data: {
-              recordId: record?.id,
+              recordId: entry?.id,
               eventId: job.id,
               revision: job.revision,
               kind: job.kind,
             },
-            ...(record && job.kind === "due" ? { categoryId: "memory" } : {}),
+            ...(entry && job.kind === "due" ? { categoryId: "memory" } : {}),
             channelId: job.kind === "nudge" ? "gentle-v3" : "reminders-v3",
             sound: "default",
             priority: job.kind === "nudge" ? "normal" : "high",
-            ...(record && ["due", "missed"].includes(job.kind)
+            ...(entry && ["due", "missed"].includes(job.kind)
               ? {
-                collapseId: `reminder-${record.id}`,
-                tag: `reminder-${record.id}`,
+                collapseId: `reminder-${entry.id}`,
+                tag: `reminder-${entry.id}`,
               }
               : {}),
             ...(job.kind === "due" ? { ttl: 180 } : {}),

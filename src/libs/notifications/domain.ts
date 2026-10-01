@@ -1,23 +1,23 @@
 import { DateTime } from "luxon";
-import type { PoxRecord } from "@/zod/records";
+import type { PoxEntry } from "@/zod/entries";
 import type { Preferences } from "@/zod/preferences";
 import { afterQuietHours, dueTime } from "@/libs/time";
 
 export const scheduleFor = (
-  record: PoxRecord,
+  entry: PoxEntry,
   prefs: Preferences,
   now: number,
 ) => {
   if (
-    record.deleted ||
-    record.kind === "context" ||
-    record.content.completed ||
-    record.content.archived
+    entry.deleted ||
+    entry.kind === "context" ||
+    entry.content.completed ||
+    entry.content.archived
   ) {
     return [];
   }
 
-  const due = dueTime(record.content, prefs);
+  const due = dueTime(entry.content, prefs);
 
   if (!due) {
     return [];
@@ -33,13 +33,13 @@ export const scheduleFor = (
   const used = new Set([Date.parse(main), Date.parse(missed)]);
 
   const nudge = DateTime.fromISO(due)
-    .minus({ minutes: record.content.nudgeMinutes })
+    .minus({ minutes: entry.content.nudgeMinutes })
     .toISO()!;
 
   const allowed = afterQuietHours(nudge, prefs);
 
   if (
-    record.content.nudgeMinutes > 0 &&
+    entry.content.nudgeMinutes > 0 &&
     Date.parse(allowed) > now &&
     Date.parse(allowed) < Date.parse(due)
   ) {

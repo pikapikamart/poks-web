@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { contentSchema, itemSchema, recordSchema } from "@/zod/records";
+import { contentSchema, itemSchema, entrySchema } from "@/zod/entries";
 import { uuid, zoneSchema } from "@/zod/common";
 
 export const proposalSchema = z.object({
@@ -10,7 +10,7 @@ export const proposalSchema = z.object({
       z.object({
         kind: z.enum(["create", "update"]),
         targetId: uuid.nullable(),
-        recordKind: z.enum(["reminder", "context", "instance"]),
+        entryKind: z.enum(["reminder", "context", "instance"]),
         spaceId: uuid.nullable(),
         content: contentSchema,
       }),
@@ -20,7 +20,7 @@ export const proposalSchema = z.object({
 export type Proposal = z.infer<typeof proposalSchema>;
 export const processedThoughtSchema = proposalSchema.extend({
   text: z.string(),
-  records: recordSchema.array().optional(),
+  entries: entrySchema.array().optional(),
 });
 export const interpretSchema = z.object({
   requestId: uuid,
@@ -28,7 +28,7 @@ export const interpretSchema = z.object({
   timeZone: zoneSchema,
   referenceTime: z.string().datetime(),
   clarification: z.string().max(4000).optional(),
-  targetRecordId: uuid.optional(),
+  targetEntryId: uuid.optional(),
 });
 
 // JSON Schema cannot encode custom domain refinements. Validate those after parsing.
@@ -38,7 +38,7 @@ export const modelProposalSchema = proposalSchema.extend({
       z.object({
         kind: z.enum(["create", "update"]),
         targetId: z.string().nullable(),
-        recordKind: z.enum(["reminder", "context", "instance"]),
+        entryKind: z.enum(["reminder", "context", "instance"]),
         spaceId: z.string().nullable(),
         content: z.object({
           ...contentSchema.shape,

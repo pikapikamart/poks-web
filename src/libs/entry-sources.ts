@@ -11,13 +11,13 @@ import {
 } from "@/database/reminders";
 
 const normalizeReminder = (
-  record: Awaited<ReturnType<typeof listRecentReminders>>[number],
+  entry: Awaited<ReturnType<typeof listRecentReminders>>[number],
 ) => ({
-  ...record,
-  space_id: record.space_reminders?.space_id ?? null,
+  ...entry,
+  space_id: entry.space_reminders?.space_id ?? null,
   content: {
-    ...(record.content as Record<string, unknown>),
-    templateId: record.context_reminders?.context_id ?? null,
+    ...(entry.content as Record<string, unknown>),
+    templateId: entry.context_reminders?.context_id ?? null,
   },
   context_reminders: undefined,
   space_reminders: undefined,

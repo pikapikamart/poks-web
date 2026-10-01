@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
-import { blankContent } from "@/libs/records";
+import { blankContent } from "@/libs/entries";
 
 const a = "00000000-0000-4000-8000-000000000001";
 const b = "00000000-0000-4000-8000-000000000002";
@@ -30,7 +30,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       physicalTables.rows.map(({ table_name }) => table_name),
     );
 
-    assert.equal(tableNames.has("records"), false);
+    assert.equal(tableNames.has("entries"), false);
     assert.equal(tableNames.has("members"), false);
     assert.equal(tableNames.has("contexts"), true);
     assert.equal(tableNames.has("reminders"), true);
@@ -54,7 +54,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       ],
     };
 
-    await db.query("select save_record($1,$2,0)", [
+    await db.query("select save_entry($1,$2,0)", [
       crypto.randomUUID(),
       JSON.stringify({
         id: contextId,
@@ -86,7 +86,7 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       templateId: contextId,
     };
 
-    const record = {
+    const entry = {
       id,
       owner_id: a,
       space_id: null,
@@ -98,9 +98,9 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     const save = () =>
       db.query<{
         result: { version: number; content: { completed: boolean } };
-      }>("select save_record($1,$2,0) as result", [
+      }>("select save_entry($1,$2,0) as result", [
         operation,
-        JSON.stringify(record),
+        JSON.stringify(entry),
       ]);
 
     const first = await save();
@@ -116,18 +116,18 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     );
     assert.equal((await save()).rows[0].result.version, 1);
     await assert.rejects(
-      db.query("select save_record($1,$2,0)", [
+      db.query("select save_entry($1,$2,0)", [
         crypto.randomUUID(),
-        JSON.stringify(record),
+        JSON.stringify(entry),
       ]),
       /CONFLICT/,
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
     assert.equal((await db.query("select * from reminders")).rows.length, 0);
     await assert.rejects(
-      db.query("select save_record($1,$2,1)", [
+      db.query("select save_entry($1,$2,1)", [
         crypto.randomUUID(),
-        JSON.stringify(record),
+        JSON.stringify(entry),
       ]),
       /FORBIDDEN/,
     );
@@ -143,9 +143,9 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       ])
     ).rows[0].token;
 
-    await db.query("select save_record($1,$2,1)", [
+    await db.query("select save_entry($1,$2,1)", [
       crypto.randomUUID(),
-      JSON.stringify({ ...record, space_id: space }),
+      JSON.stringify({ ...entry, space_id: space }),
     ]);
     assert.deepEqual(
       (
@@ -160,19 +160,19 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     await db.query("select accept_invite($1)", [token]);
     assert.equal((await db.query("select * from reminders")).rows.length, 1);
     await assert.rejects(
-      db.query("select save_record($1,$2,2)", [
+      db.query("select save_entry($1,$2,2)", [
         crypto.randomUUID(),
-        JSON.stringify({ ...record, space_id: space }),
+        JSON.stringify({ ...entry, space_id: space }),
       ]),
       /FORBIDDEN/,
     );
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     await db.query("select manage_member($1,$2,'editor')", [space, b]);
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
-    await db.query("select save_record($1,$2,2)", [
+    await db.query("select save_entry($1,$2,2)", [
       crypto.randomUUID(),
       JSON.stringify({
-        ...record,
+        ...entry,
         space_id: space,
         content: {
           ...content,
@@ -205,10 +205,10 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     ).rows[0];
 
     await assert.rejects(
-      db.query("select save_record($1,$2,$3)", [
+      db.query("select save_entry($1,$2,$3)", [
         crypto.randomUUID(),
         JSON.stringify({
-          ...record,
+          ...entry,
           space_id: space,
           content: {
             ...completed.content,
@@ -222,10 +222,10 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
       ]),
       /CANNOT_EDIT_COMPLETED/,
     );
-    await db.query("select save_record($1,$2,$3)", [
+    await db.query("select save_entry($1,$2,$3)", [
       crypto.randomUUID(),
       JSON.stringify({
-        ...record,
+        ...entry,
         space_id: space,
         content: completed.content,
         deleted: true,

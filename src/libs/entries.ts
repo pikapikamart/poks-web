@@ -1,4 +1,4 @@
-import type { Content } from "@/zod/records";
+import type { Content } from "@/zod/entries";
 
 export const blankContent = (timeZone = "UTC"): Content => {
   return {

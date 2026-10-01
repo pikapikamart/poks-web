@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import type { Content } from "@/zod/records";
+import type { Content } from "@/zod/entries";
 import type { Preferences } from "@/zod/preferences";
 
 export const nextOccurrence = (

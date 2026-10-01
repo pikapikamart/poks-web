@@ -9,7 +9,7 @@ import {
   findRecordsByIds,
   listContextRecords,
   listRecentRecords,
-} from "@/libs/record-sources";
+} from "@/libs/entry-sources";
 import { listSpaces } from "@/database/spaces";
 import { listProfiles } from "@/database/profiles";
 import {
@@ -29,7 +29,7 @@ import { buildActions } from "@/libs/ai/domain";
 import { interpretThought } from "@/libs/ai/interpret";
 import { transcribe } from "@/libs/ai/transcription";
 import { interpretSchema, proposalSchema } from "@/zod/ai";
-import { recordSchema } from "@/zod/records";
+import { entrySchema } from "@/zod/entries";
 import { listSpaceMembersBySpaceId } from "@/database/space-members";
 
 export const POST = withApiErrorHandling(
@@ -64,7 +64,7 @@ export const POST = withApiErrorHandling(
         text,
         timeZone: url.searchParams.get("timeZone"),
         referenceTime: url.searchParams.get("referenceTime"),
-        targetRecordId: url.searchParams.get("targetRecordId") ?? undefined,
+        targetEntryId: url.searchParams.get("targetEntryId") ?? undefined,
       });
     }
 
@@ -91,10 +91,10 @@ export const POST = withApiErrorHandling(
       }
 
       const savedProposal = proposalSchema.parse(existing.proposal);
-      const savedRecords = recordSchema.array().parse(existing.result);
+      const savedRecords = entrySchema.array().parse(existing.result);
 
       return success(
-        { ...savedProposal, text: input.text, records: savedRecords },
+        { ...savedProposal, text: input.text, entries: savedRecords },
         context,
         rateLimit,
       );
@@ -107,20 +107,20 @@ export const POST = withApiErrorHandling(
         ?.slice(0, 40)
         .join(" OR ") ?? "";
     const [matching, contexts, recent, spaces, people] = await Promise.all([
-      input.targetRecordId
-        ? findRecordsByIds(db, [input.targetRecordId])
+      input.targetEntryId
+        ? findRecordsByIds(db, [input.targetEntryId])
         : findRecordsBySearchTerms(db, terms),
-      input.targetRecordId ? Promise.resolve([]) : listContextRecords(db),
-      input.targetRecordId ? Promise.resolve([]) : listRecentRecords(db),
+      input.targetEntryId ? Promise.resolve([]) : listContextRecords(db),
+      input.targetEntryId ? Promise.resolve([]) : listRecentRecords(db),
       listSpaces(db),
       listProfiles(db),
     ]);
 
     if (
-      input.targetRecordId &&
+      input.targetEntryId &&
       !matching.some(
         (row) =>
-          row.id === input.targetRecordId &&
+          row.id === input.targetEntryId &&
           !row.deleted &&
           row.kind !== "context",
       )
@@ -132,57 +132,57 @@ export const POST = withApiErrorHandling(
       );
     }
 
-    const target = input.targetRecordId
-      ? recordSchema.parse(
-        matching.find((row) => row.id === input.targetRecordId),
+    const target = input.targetEntryId
+      ? entrySchema.parse(
+        matching.find((row) => row.id === input.targetEntryId),
       )
       : null;
     const linkedContext = target?.content.templateId
       ? await findRecordsByIds(db, [target.content.templateId])
       : [];
 
-    const records = boundedSources([
+    const entries = boundedSources([
       ...new Map(
         [...matching, ...linkedContext, ...contexts, ...recent].map((row) => {
-          const record = recordSchema.parse(row);
+          const entry = entrySchema.parse(row);
 
-          return [record.id, record] as const;
+          return [entry.id, entry] as const;
         }),
       ).values(),
     ]);
 
     context.stage = "interpretation";
-    const proposal = await interpretThought(input, records, spaces, people);
+    const proposal = await interpretThought(input, entries, spaces, people);
 
     if (
-      input.targetRecordId &&
+      input.targetEntryId &&
       !proposal.question &&
       (proposal.actions.length !== 1 ||
         proposal.actions[0].kind !== "update" ||
-        proposal.actions[0].targetId !== input.targetRecordId)
+        proposal.actions[0].targetId !== input.targetEntryId)
     ) {
       throw new HttpError(
         422,
-        "Please record a change to this reminder.",
+        "Please entry a change to this reminder.",
         "INVALID_AI_TARGET",
       );
     }
 
     if (!proposal.question && proposal.actions.length) {
       context.stage = "application";
-      const actions = buildActions(proposal, records, records, user.id);
+      const actions = buildActions(proposal, entries, entries, user.id);
 
       for (const action of actions) {
-        const record = action.record;
+        const entry = action.entry;
 
-        if (record.space_id) {
-          const members = await listSpaceMembersBySpaceId(db, record.space_id);
+        if (entry.space_id) {
+          const members = await listSpaceMembersBySpaceId(db, entry.space_id);
           const canEdit = members.some(
             (member) =>
               member.user_id === user.id &&
               ["owner", "editor"].includes(member.role),
           );
-          const validAssignees = record.content.items.every(
+          const validAssignees = entry.content.items.every(
             (item) =>
               !item.assignee ||
               members.some((member) => member.user_id === item.assignee),
@@ -204,7 +204,7 @@ export const POST = withApiErrorHandling(
             );
           }
         } else if (
-          record.content.items.some(
+          entry.content.items.some(
             (item) => item.assignee && item.assignee !== user.id,
           )
         ) {
@@ -216,7 +216,7 @@ export const POST = withApiErrorHandling(
         }
       }
 
-      const saved = recordSchema
+      const saved = entrySchema
         .array()
         .parse(
           await applyAiOperation(
@@ -224,7 +224,7 @@ export const POST = withApiErrorHandling(
             input.requestId,
             input,
             proposal,
-            records,
+            entries,
             actions,
           ),
         );
@@ -232,7 +232,7 @@ export const POST = withApiErrorHandling(
       context.stage = "response";
 
       return success(
-        { ...proposal, text: input.text, records: saved },
+        { ...proposal, text: input.text, entries: saved },
         context,
         rateLimit,
       );
