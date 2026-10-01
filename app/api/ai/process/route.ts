@@ -65,6 +65,7 @@ export const POST = withApiErrorHandling(
         timeZone: url.searchParams.get("timeZone"),
         referenceTime: url.searchParams.get("referenceTime"),
         targetEntryId: url.searchParams.get("targetEntryId") ?? undefined,
+        targetSpaceId: url.searchParams.get("targetSpaceId") ?? undefined,
       });
     }
 
@@ -152,7 +153,24 @@ export const POST = withApiErrorHandling(
     ]);
 
     context.stage = "interpretation";
-    const proposal = await interpretThought(input, entries, spaces, people);
+    const interpreted = await interpretThought(input, entries, spaces, people);
+    const proposal = input.targetSpaceId
+      ? {
+        ...interpreted,
+        actions: interpreted.actions.map((action) =>
+          action.kind === "create"
+            ? { ...action, spaceId: input.targetSpaceId! }
+            : action,
+        ),
+      }
+      : interpreted;
+
+    if (
+      input.targetSpaceId &&
+      !spaces.some((space) => space.id === input.targetSpaceId)
+    ) {
+      throw new HttpError(403, "You cannot edit this Space.", "FORBIDDEN");
+    }
 
     if (
       input.targetEntryId &&

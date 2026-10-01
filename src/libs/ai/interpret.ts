@@ -14,6 +14,8 @@ import {
   normalizeProposal,
   removeUnrequestedReminderSteps,
   correctTomorrowReminderDate,
+  correctExplicitReminderTime,
+  correctReminderCompletionMode,
 } from "@/libs/ai/domain";
 
 const buildInterpretInstructions = (
@@ -34,6 +36,7 @@ const buildInterpretInstructions = (
     "A new reminder may be undated; do not require a date, deadline, person, or elaboration when the thought is otherwise actionable.",
     "When the thought clearly names a supplied shared space, create the reminder in that space by using its spaceId; otherwise keep the new reminder personal.",
     "Do not guess between similarly named spaces or invent a space ID.",
+    "For a Space reminder, set completionMode to individual when each person, member, or user should complete it separately with their own progress. Set completionMode to shared when one completion should count for everyone or people should complete it together. Default to shared when the user does not specify. Personal reminders always use shared.",
     "Consider the supplied Context definitions when creating a reminder.",
     "Create an instance from a Context when the thought clearly calls for that reusable process or explicitly names it; otherwise create a normal reminder.",
     "For every new reminder or Context instance, write a brief, helpful note in content.notes. Capture relevant details or intent from the user's thought and any supplied Context, without merely repeating the title.",
@@ -41,7 +44,7 @@ const buildInterpretInstructions = (
     "Ask a concise clarification with no actions only when the requested change depends on choosing between genuinely ambiguous existing memories, Contexts, spaces, or account people, or when it cannot be safely inferred.",
     "Retrieval is bounded: an absent match does not prove a Context does not exist.",
     "Preserve every field the user did not ask to change on updates.",
-    "When targetEntryId is supplied, update only that entry. Return exactly one update action with that target ID; never create a new entry or edit another entry. Keep its existing sharing, Context, and checklist progress unless the user explicitly changes them.",
+    "When targetEntryId is supplied, update only that entry. Return exactly one update action with that target ID; never create a new entry or edit another entry. Keep its existing sharing, completion mode, Context, and checklist progress unless the user explicitly changes them.",
     "Never invent a date for an undated thought.",
     "When a user explicitly gives a daypart with a date, schedule it as a precise local time: morning is 09:00, afternoon is 14:00, evening is 18:00, and tonight is 20:00. Use dueAt with that date and the supplied timeZone.",
     "When a reminder has a date but the user gives no clock time or daypart, schedule it for 09:00 on that date in the supplied timeZone. Use dueAt with an ISO offset and leave dueDate null.",
@@ -136,6 +139,17 @@ export const interpretThought = async (
     input.referenceTime,
     input.timeZone,
   );
+  const withCorrectedTime = correctExplicitReminderTime(
+    withCorrectedDate,
+    input.text,
+    input.timeZone,
+  );
 
-  return defaultDatedReminderTimes(withCorrectedDate, entries, input.timeZone);
+  const withCompletionMode = correctReminderCompletionMode(
+    withCorrectedTime,
+    input.text,
+    input.targetSpaceId,
+  );
+
+  return defaultDatedReminderTimes(withCompletionMode, entries, input.timeZone);
 };

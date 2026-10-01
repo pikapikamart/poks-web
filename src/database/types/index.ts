@@ -510,6 +510,58 @@ export type Database = {
           },
         ];
       };
+      reminder_participants: {
+        Row: {
+          completed: boolean;
+          completed_at: string | null;
+          created_at: string;
+          reminder_id: string;
+          space_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          completed?: boolean;
+          completed_at?: string | null;
+          created_at?: string;
+          reminder_id: string;
+          space_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          completed?: boolean;
+          completed_at?: string | null;
+          created_at?: string;
+          reminder_id?: string;
+          space_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reminder_participants_reminder_id_fkey";
+            columns: ["reminder_id"];
+            isOneToOne: false;
+            referencedRelation: "reminders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reminder_participants_space_id_fkey";
+            columns: ["space_id"];
+            isOneToOne: false;
+            referencedRelation: "spaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reminder_participants_space_id_user_id_fkey";
+            columns: ["space_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "space_members";
+            referencedColumns: ["space_id", "user_id"];
+          },
+        ];
+      };
       reminder_recurrences: {
         Row: {
           next_reminder_id: string | null;
@@ -540,8 +592,38 @@ export type Database = {
           },
         ];
       };
+      reminder_step_completions: {
+        Row: {
+          completed_at: string;
+          reminder_id: string;
+          step_id: string;
+          user_id: string;
+        };
+        Insert: {
+          completed_at?: string;
+          reminder_id: string;
+          step_id: string;
+          user_id: string;
+        };
+        Update: {
+          completed_at?: string;
+          reminder_id?: string;
+          step_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reminder_step_completions_reminder_id_user_id_fkey";
+            columns: ["reminder_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "reminder_participants";
+            referencedColumns: ["reminder_id", "user_id"];
+          },
+        ];
+      };
       reminders: {
         Row: {
+          completion_mode: string | null;
           content: Json;
           deleted: boolean;
           id: string;
@@ -554,6 +636,7 @@ export type Database = {
           version: number;
         };
         Insert: {
+          completion_mode?: string | null;
           content: Json;
           deleted?: boolean;
           id: string;
@@ -566,6 +649,7 @@ export type Database = {
           version?: number;
         };
         Update: {
+          completion_mode?: string | null;
           content?: Json;
           deleted?: boolean;
           id?: string;
@@ -579,7 +663,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "reminders_space_id_fkey";
+            foreignKeyName: "records_space_id_fkey";
             columns: ["space_id"];
             isOneToOne: false;
             referencedRelation: "spaces";
@@ -691,12 +775,20 @@ export type Database = {
         Args: { c: Database["public"]["Tables"]["contexts"]["Row"] };
         Returns: boolean;
       };
+      can_edit_record: {
+        Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
+        Returns: boolean;
+      };
       can_edit_reminder: {
         Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
         Returns: boolean;
       };
       can_read_context: {
         Args: { c: Database["public"]["Tables"]["contexts"]["Row"] };
+        Returns: boolean;
+      };
+      can_read_record: {
+        Args: { r: Database["public"]["Tables"]["reminders"]["Row"] };
         Returns: boolean;
       };
       can_read_reminder: {
@@ -781,6 +873,7 @@ export type Database = {
       due_recurrences: {
         Args: never;
         Returns: {
+          completion_mode: string | null;
           content: Json;
           deleted: boolean;
           id: string;
@@ -869,11 +962,15 @@ export type Database = {
         };
       };
       save_entry: {
-        Args: { p_expected: number; p_operation: string; p_entry: Json };
+        Args: { p_entry: Json; p_expected: number; p_operation: string };
         Returns: Json;
       };
       save_entry_internal: {
-        Args: { p_expected: number; p_operation: string; p_entry: Json };
+        Args: { p_expected: number; p_operation: string; p_record: Json };
+        Returns: Json;
+      };
+      set_reminder_progress: {
+        Args: { p_completed: boolean; p_reminder: string; p_step?: string };
         Returns: Json;
       };
       space_role: { Args: { s: string }; Returns: string };

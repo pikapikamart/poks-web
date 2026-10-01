@@ -169,6 +169,86 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     await db.query("select manage_member($1,$2,'editor')", [space, b]);
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
+    const individualId = crypto.randomUUID();
+    const individualStep = crypto.randomUUID();
+    await db.query("select save_entry($1,$2,0)", [
+      crypto.randomUUID(),
+      JSON.stringify({
+        id: individualId,
+        owner_id: b,
+        space_id: space,
+        kind: "reminder",
+        content: {
+          ...blankContent(),
+          title: "Individual research",
+          completionMode: "individual",
+          items: [
+            {
+              id: individualStep,
+              title: "Read the paper",
+              required: true,
+              completed: false,
+              assignee: null,
+              instructions: "",
+            },
+          ],
+        },
+        deleted: false,
+      }),
+    ]);
+    assert.equal(
+      (
+        await db.query<{ count: number }>(
+          "select count(*)::integer as count from reminder_participants where reminder_id=$1",
+          [individualId],
+        )
+      ).rows[0].count,
+      2,
+    );
+    await db.query("select set_reminder_progress($1,true,$2)", [
+      individualId,
+      individualStep,
+    ]);
+    assert.deepEqual(
+      (
+        await db.query<{ user_id: string; completed: boolean }>(
+          "select user_id,completed from reminder_participants where reminder_id=$1 order by user_id",
+          [individualId],
+        )
+      ).rows,
+      [
+        { user_id: a, completed: false },
+        { user_id: b, completed: true },
+      ],
+    );
+    await assert.rejects(
+      db.query("select save_entry($1,$2,1)", [
+        crypto.randomUUID(),
+        JSON.stringify({
+          id: individualId,
+          owner_id: b,
+          space_id: space,
+          kind: "reminder",
+          content: {
+            ...blankContent(),
+            title: "Individual research",
+            completionMode: "shared",
+            items: [
+              {
+                id: individualStep,
+                title: "Read the paper",
+                required: true,
+                completed: false,
+                assignee: null,
+                instructions: "",
+              },
+            ],
+          },
+          deleted: false,
+        }),
+      ]),
+      /COMPLETION_MODE_HAS_PROGRESS/,
+    );
     await db.query("select save_entry($1,$2,2)", [
       crypto.randomUUID(),
       JSON.stringify({
@@ -183,7 +263,8 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     assert.equal(
       (
         await db.query<{ content: { completed: boolean } }>(
-          "select content from reminders",
+          "select content from reminders where id=$1",
+          [id],
         )
       ).rows[0].content.completed,
       true,
@@ -234,6 +315,15 @@ test("migrations, RLS, conflicts, completion, and invitation lifecycle", async (
     ]);
     await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
     await db.query("select manage_member($1,$2,null)", [space, b]);
+    assert.deepEqual(
+      (
+        await db.query<{ user_id: string }>(
+          "select user_id from reminder_participants where reminder_id=$1",
+          [individualId],
+        )
+      ).rows,
+      [{ user_id: a }],
+    );
     await db.exec(`select set_config('request.jwt.claim.sub','${b}',false);`);
     assert.equal((await db.query("select * from reminders")).rows.length, 0);
   } finally {

@@ -114,6 +114,40 @@ const requestsChecklist = (thought: string) =>
     thought,
   );
 
+const requestsIndividualCompletion = (thought: string) =>
+  /\b(each|every)\s+(person|member|user)\b.{0,40}\b(own|separate|separately|individually|independent)\b|\b(everyone|people|members)\b.{0,30}\b(completes?|finishes?|checks?)\b.{0,20}\b(separately|individually|themselves)\b/i.test(
+    thought,
+  );
+
+const requestsSharedCompletion = (thought: string) =>
+  /\b(complete|finish|check)\s+(it\s+)?together\b|\bone\s+(completion|person)\b.{0,30}\b(for|counts? for)\s+everyone\b|\bshared\s+(completion|progress)\b/i.test(
+    thought,
+  );
+
+export const correctReminderCompletionMode = (
+  proposal: Proposal,
+  thought: string,
+  targetSpaceId?: string,
+): Proposal => {
+  const individual = requestsIndividualCompletion(thought);
+  const shared = requestsSharedCompletion(thought);
+
+  return {
+    ...proposal,
+    actions: proposal.actions.map((action) => {
+      const spaceId = targetSpaceId ?? action.spaceId;
+
+      return action.entryKind !== "context" && spaceId && individual !== shared
+        ? {
+          ...action,
+          spaceId,
+          completionMode: individual ? "individual" : "shared",
+        }
+        : { ...action, completionMode: undefined };
+    }),
+  };
+};
+
 export const removeUnrequestedReminderSteps = (
   proposal: Proposal,
   thought: string,
@@ -206,6 +240,55 @@ export const correctTomorrowReminderDate = (
           dueDate: tomorrowDate,
           timeZone,
         },
+      },
+    ],
+  };
+};
+
+export const correctExplicitReminderTime = (
+  proposal: Proposal,
+  thought: string,
+  timeZone: string,
+): Proposal => {
+  const match = thought.match(
+    /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b/i,
+  );
+
+  if (!match || proposal.question || proposal.actions.length !== 1) {
+    return proposal;
+  }
+
+  const action = proposal.actions[0];
+
+  if (action.entryKind === "context" || !action.content.dueAt) {
+    return proposal;
+  }
+
+  const meridiem = match[3].toLowerCase().startsWith("p") ? "pm" : "am";
+  const clockHour = Number(match[1]);
+  const hour =
+    meridiem === "pm"
+      ? clockHour === 12
+        ? 12
+        : clockHour + 12
+      : clockHour === 12
+        ? 0
+        : clockHour;
+  const dueAt = DateTime.fromISO(action.content.dueAt, { setZone: true })
+    .setZone(timeZone)
+    .set({ hour, minute: Number(match[2] ?? 0), second: 0, millisecond: 0 })
+    .toISO({ suppressMilliseconds: true });
+
+  if (!dueAt) {
+    return proposal;
+  }
+
+  return {
+    ...proposal,
+    actions: [
+      {
+        ...action,
+        content: { ...action.content, dueAt, dueDate: null, timeZone },
       },
     ],
   };
@@ -328,6 +411,12 @@ export const buildActions = (
       }
     }
 
+    const completionMode =
+      a.entryKind === "context" || !a.spaceId
+        ? "shared"
+        : (a.completionMode ?? source?.completion_mode ?? "shared");
+    const content = contentSchema.parse(a.content);
+
     return {
       operationId: crypto.randomUUID(),
       expectedVersion: source?.version ?? 0,
@@ -336,7 +425,11 @@ export const buildActions = (
         owner_id: source?.owner_id ?? userId,
         space_id: a.spaceId,
         kind: a.entryKind,
-        content: contentSchema.parse(a.content),
+        content: {
+          ...content,
+          ...(a.entryKind === "context" ? {} : { completionMode }),
+        },
+        completion_mode: a.entryKind === "context" ? undefined : completionMode,
         version: source?.version ?? 0,
         updated_at: new Date().toISOString(),
         deleted: false,

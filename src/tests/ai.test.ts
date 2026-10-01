@@ -12,6 +12,8 @@ import {
   defaultDatedReminderTimes,
   fillNewReminderNotes,
   correctTomorrowReminderDate,
+  correctExplicitReminderTime,
+  correctReminderCompletionMode,
   removeUnrequestedReminderSteps,
 } from "@/libs/ai/domain";
 
@@ -69,6 +71,7 @@ test("clarification never produces mutations and invented targets are rejected",
               targetId: r.id,
               entryKind: "reminder",
               spaceId: null,
+              completionMode: "shared",
               content: r.content,
             },
           ],
@@ -101,6 +104,7 @@ test("Context instances copy the user's definition and receive fresh step identi
           targetId: null,
           entryKind: "instance",
           spaceId: null,
+          completionMode: "shared",
           content: {
             ...blankContent(),
             title: "Execution",
@@ -212,6 +216,68 @@ test("tomorrow at 7 PM uses the next local day when the model picks today", () =
   assert.equal(corrected.actions[0].content.dueAt, "2026-09-29T19:00:00+08:00");
   assert.equal(corrected.actions[0].content.dueDate, null);
   assert.equal(action.content.dueAt, "2026-09-28T19:00:00+08:00");
+});
+
+test("an explicit local clock time overrides a drifted AI hour", () => {
+  const proposal: Proposal = {
+    summary: "Close the laptop",
+    question: null,
+    actions: [
+      {
+        kind: "create",
+        targetId: null,
+        entryKind: "reminder",
+        spaceId: null,
+        content: {
+          ...blankContent("Asia/Manila"),
+          title: "Close my laptop",
+          dueAt: "2026-10-01T20:00:00+08:00",
+        },
+      },
+    ],
+  };
+
+  const corrected = correctExplicitReminderTime(
+    proposal,
+    "Remind me at 9 p.m. today that I need to close my laptop.",
+    "Asia/Manila",
+  );
+
+  assert.equal(corrected.actions[0].content.dueAt, "2026-10-01T21:00:00+08:00");
+});
+
+test("Space completion wording deterministically selects member progress", () => {
+  const spaceId = crypto.randomUUID();
+  const proposal: Proposal = {
+    summary: "Submit the research tasks",
+    question: null,
+    actions: [
+      {
+        kind: "create",
+        targetId: null,
+        entryKind: "reminder",
+        spaceId,
+        completionMode: "shared",
+        content: { ...blankContent(), title: "Submit research tasks" },
+      },
+    ],
+  };
+
+  const individual = correctReminderCompletionMode(
+    proposal,
+    "Each member should complete this separately",
+  );
+  const shared = correctReminderCompletionMode(
+    proposal,
+    "One completion counts for everyone",
+  );
+
+  assert.equal(individual.actions[0].completionMode, "individual");
+  assert.equal(shared.actions[0].completionMode, "shared");
+  assert.equal(
+    buildActions(individual, [], [], user)[0].entry.completion_mode,
+    "individual",
+  );
 });
 
 test("tomorrow correction follows the user's local date across UTC midnight", () => {

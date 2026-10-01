@@ -33,15 +33,19 @@ export const contentSchema = z
   );
 export type Content = z.infer<typeof contentSchema>;
 export type Item = z.infer<typeof itemSchema>;
+const entryContentSchema = contentSchema.safeExtend({
+  completionMode: z.enum(["shared", "individual"]).optional(),
+});
 export const entrySchema = z.object({
   id: uuid,
   owner_id: uuid,
   space_id: uuid.nullable(),
   kind: z.enum(["reminder", "context", "instance"]),
-  content: contentSchema,
+  content: entryContentSchema,
   version: z.number().int().nonnegative(),
   updated_at: z.string(),
   deleted: z.boolean(),
+  completion_mode: z.enum(["shared", "individual"]).optional(),
 });
 export type PoxEntry = z.infer<typeof entrySchema>;
 export const mutationSchema = z.object({

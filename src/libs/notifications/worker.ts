@@ -47,6 +47,23 @@ const recipients = async (entry: PoxEntry) => {
   );
 };
 
+const participantCompleted = async (entry: PoxEntry, userId: string) => {
+  if (entry.completion_mode !== "individual") {
+    return false;
+  }
+
+  const participant = checked(
+    await createServerClient()
+      .from("reminder_participants")
+      .select("completed")
+      .eq("reminder_id", entry.id)
+      .eq("user_id", userId)
+      .maybeSingle(),
+  );
+
+  return participant?.completed ?? true;
+};
+
 const preferences = async (user: string) => {
   const row = checked(
     await createServerClient()
@@ -108,6 +125,10 @@ export const expandOutbox = async () => {
           );
 
           for (const user of await recipients(entry)) {
+            if (await participantCompleted(entry, user)) {
+              continue;
+            }
+
             const prefs = await preferences(user);
             const epoch = await generation(user);
 
@@ -237,6 +258,8 @@ const eligibleRecord = async (job: Delivery) => {
     entry.deleted ||
     entry.content.archived ||
     (!job.kind.startsWith("activity:") && entry.content.completed) ||
+    (!job.kind.startsWith("activity:") &&
+      (await participantCompleted(entry, job.user_id))) ||
     !(await recipients(entry).then((users) => users.includes(job.user_id))) ||
     (await generation(job.user_id)) !== job.generation
   ) {

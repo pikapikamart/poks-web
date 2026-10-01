@@ -12,6 +12,7 @@ export const proposalSchema = z.object({
         targetId: uuid.nullable(),
         entryKind: z.enum(["reminder", "context", "instance"]),
         spaceId: uuid.nullable(),
+        completionMode: z.enum(["shared", "individual"]).optional(),
         content: contentSchema,
       }),
     )
@@ -29,6 +30,7 @@ export const interpretSchema = z.object({
   referenceTime: z.string().datetime(),
   clarification: z.string().max(4000).optional(),
   targetEntryId: uuid.optional(),
+  targetSpaceId: uuid.optional(),
 });
 
 // JSON Schema cannot encode custom domain refinements. Validate those after parsing.
@@ -40,6 +42,7 @@ export const modelProposalSchema = proposalSchema.extend({
         targetId: z.string().nullable(),
         entryKind: z.enum(["reminder", "context", "instance"]),
         spaceId: z.string().nullable(),
+        completionMode: z.enum(["shared", "individual"]),
         content: z.object({
           ...contentSchema.shape,
           timeZone: z.string(),
